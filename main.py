@@ -10,6 +10,8 @@ from logic.controllers.ui_controller import UIController
 from logic.controllers.game_controller import GameController
 from logic.assets.sprite_pygame import PygameSprite
 
+from localization import get_text, toggle_language, current_lang
+
 # --- КОНСТАНТЫ ---
 VIRTUAL_WIDTH = 1920
 VIRTUAL_HEIGHT = 1080
@@ -23,8 +25,6 @@ STATE_GAME = 1
 
 
 class MenuCoin(PygameSprite):
-    """Монетка для фона меню с простой физикой"""
-
     def __init__(self, x, y, tex_heads, tex_tails, scale):
         super().__init__(image=tex_heads, scale=scale)
         self.center_x = x
@@ -39,7 +39,6 @@ class MenuCoin(PygameSprite):
         self.center_x += self.vx * dt
         self.center_y += self.vy * dt
 
-        # Отскок от стен
         if self.left < 0:
             self.left = 0
             self.vx *= -1
@@ -55,7 +54,6 @@ class MenuCoin(PygameSprite):
 
 
 def _handle_menu_collisions(coins):
-    """Простая физика столкновений для монет в меню"""
     n = len(coins)
     for i in range(n):
         for j in range(i + 1, n):
@@ -75,19 +73,17 @@ def _handle_menu_collisions(coins):
                 nx = dx / dist
                 ny = dy / dist
 
-                # 1. Раздвигаем монеты (чтобы не слипались)
                 move = overlap / 2.0
                 c1.center_x += nx * move
                 c1.center_y += ny * move
                 c2.center_x -= nx * move
                 c2.center_y -= ny * move
 
-                # 2. Упругий удар (меняем скорости по нормали)
                 dvx = c1.vx - c2.vx
                 dvy = c1.vy - c2.vy
                 dot = dvx * nx + dvy * ny
 
-                if dot < 0:  # Столкновение только если они сближаются
+                if dot < 0:
                     c1.vx -= dot * nx
                     c1.vy -= dot * ny
                     c2.vx += dot * nx
@@ -98,14 +94,12 @@ def main():
     pygame.init()
     pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
 
-    # Настройка окна (80% от экрана)
     info = pygame.display.Info()
     start_w = int(info.current_w * 0.8)
     start_h = int(info.current_h * 0.8)
     screen = pygame.display.set_mode((start_w, start_h), pygame.RESIZABLE)
     pygame.display.set_caption(TITLE)
 
-    # Виртуальный канвас (на нем все рисуется)
     canvas = pygame.Surface((VIRTUAL_WIDTH, VIRTUAL_HEIGHT))
     clock = pygame.time.Clock()
 
@@ -117,7 +111,6 @@ def main():
     sound_manager = SoundManager()
     sound_manager.load_all()
 
-    # Загрузка шрифтов
     font_path = asset_manager.ui_assets.get("font_name", "Arial")
     try:
         if font_path != "Arial" and os.path.exists(font_path):
@@ -130,7 +123,6 @@ def main():
         main_font = pygame.font.SysFont("Arial", 20)
         title_font = pygame.font.SysFont("Arial", 40)
 
-    # Инициализация контроллеров
     scale_factor = 1.0
     ui = UIController(
         panel_x=WORLD_WIDTH,
@@ -149,11 +141,9 @@ def main():
         scale_factor=scale_factor
     )
 
-    # --- МЕНЮ ---
     state = STATE_MENU
     running = True
 
-    # Проверка сохранения
     has_save = False
     save_path = game.get_save_path()
     if os.path.exists(save_path):
@@ -184,12 +174,27 @@ def main():
 
     spawn_menu_coins()
 
-    # Кнопки меню
     btn_w, btn_h = 300, 70
     cx, cy = VIRTUAL_WIDTH // 2, VIRTUAL_HEIGHT // 2
     btn_play_rect = pygame.Rect(cx - btn_w // 2, cy, btn_w, btn_h)
     btn_help_rect = pygame.Rect(cx - btn_w // 2, cy + 90, btn_w, btn_h)
-    btn_exit_rect = pygame.Rect(cx - btn_w // 2, cy + 180, btn_w, btn_h)
+
+    # Кнопки настроек в МЕНЮ
+    settings_btn_w = 100
+    settings_btn_h = 50
+    settings_margin = 20
+    btn_lang_rect = pygame.Rect(VIRTUAL_WIDTH - settings_btn_w - settings_margin, settings_margin, settings_btn_w,
+                                settings_btn_h)
+    btn_sound_rect = pygame.Rect(VIRTUAL_WIDTH - (settings_btn_w * 2) - (settings_margin * 2), settings_margin,
+                                 settings_btn_w, settings_btn_h)
+
+    # Кнопки настроек в ИГРЕ
+    game_btn_w = 50
+    game_btn_h = 50
+    game_btn_margin = 20
+    game_mute_rect = pygame.Rect(VIRTUAL_WIDTH - game_btn_w - game_btn_margin, game_btn_margin, game_btn_w, game_btn_h)
+    game_lang_rect = pygame.Rect(VIRTUAL_WIDTH - (game_btn_w * 2) - (game_btn_margin * 2), game_btn_margin, game_btn_w,
+                                 game_btn_h)
 
     show_help = False
     help_scroll_y = 0
@@ -200,44 +205,50 @@ def main():
         dt = clock.tick(FPS) / 1000.0
         if dt > 0.1: dt = 0.1
 
-        # Обработка событий
+        # ВАЖНО: Расчет координат мыши должен быть В НАЧАЛЕ цикла, чтобы vmx/vmy были доступны везде
+        mx, my = pygame.mouse.get_pos()
+        vmx = mx * (VIRTUAL_WIDTH / screen.get_width())
+        vmy = my * (VIRTUAL_HEIGHT / screen.get_height())
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 if state == STATE_GAME: game.save_game()
                 running = False
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                mx, my = event.pos
-                vmx = mx * (VIRTUAL_WIDTH / screen.get_width())
-                vmy = my * (VIRTUAL_HEIGHT / screen.get_height())
-
                 if state == STATE_MENU:
                     if show_help:
-                        # Логика закрытия окна помощи
                         help_x = (VIRTUAL_WIDTH - help_w) // 2
                         help_y = (VIRTUAL_HEIGHT - help_h) // 2
                         close_btn_size = 30
-                        # Кнопка X (справа вверху внутри окна)
                         close_rect = pygame.Rect(help_x + help_w - close_btn_size - 10, help_y + 10, close_btn_size,
                                                  close_btn_size)
-
                         if close_rect.collidepoint(vmx, vmy):
                             show_help = False
-                            continue  # Важно: не пропускаем клик дальше
+                            continue
                     else:
-                        # Логика кнопок главного меню
                         if btn_play_rect.collidepoint(vmx, vmy):
                             state = STATE_GAME
                             if not has_save: game.reset_game()
                         elif btn_help_rect.collidepoint(vmx, vmy):
                             show_help = True
-                        elif btn_exit_rect.collidepoint(vmx, vmy):
-                            running = False
+                        elif btn_lang_rect.collidepoint(vmx, vmy):
+                            toggle_language()
+                            ui.reload_texts()
+                            spawn_menu_coins()
+                        elif btn_sound_rect.collidepoint(vmx, vmy):
+                            sound_manager.toggle_mute()
 
                 elif state == STATE_GAME:
                     logic_y = VIRTUAL_HEIGHT - vmy
                     if event.button == pygame.BUTTON_LEFT:
-                        if vmx > WORLD_WIDTH:
+                        # Проверка кнопок в игре
+                        if game_mute_rect.collidepoint(vmx, vmy):
+                            sound_manager.toggle_mute()
+                        elif game_lang_rect.collidepoint(vmx, vmy):
+                            toggle_language()
+                            ui.reload_texts()
+                        elif vmx > WORLD_WIDTH:
                             ui.on_mouse_press(vmx, vmy)
                         else:
                             game.on_mouse_press(vmx, logic_y, pygame.BUTTON_LEFT)
@@ -246,11 +257,8 @@ def main():
                             game.on_mouse_press_rmb(vmx, logic_y)
 
             elif event.type == pygame.MOUSEBUTTONUP:
-                mx, my = event.pos
-                vmx = mx * (VIRTUAL_WIDTH / screen.get_width())
-                vmy = my * (VIRTUAL_HEIGHT / screen.get_height())
-                logic_y = VIRTUAL_HEIGHT - vmy
                 if state == STATE_GAME:
+                    logic_y = VIRTUAL_HEIGHT - vmy
                     if event.button == pygame.BUTTON_RIGHT:
                         game.on_mouse_release_rmb(vmx, logic_y)
                     elif event.button == pygame.BUTTON_LEFT:
@@ -264,19 +272,12 @@ def main():
                                     game.try_buy_upgrade(upgrade_id)
 
             elif event.type == pygame.MOUSEMOTION:
-                mx, my = event.pos
-                vmx = mx * (VIRTUAL_WIDTH / screen.get_width())
-                vmy = my * (VIRTUAL_HEIGHT / screen.get_height())
-                logic_y = VIRTUAL_HEIGHT - vmy
                 if state == STATE_GAME:
+                    logic_y = VIRTUAL_HEIGHT - vmy
                     game.on_mouse_motion(vmx, logic_y, event.rel[0] * (VIRTUAL_WIDTH / screen.get_width()),
                                          -event.rel[1] * (VIRTUAL_HEIGHT / screen.get_height()))
 
             elif event.type == pygame.MOUSEWHEEL:
-                mx, my = pygame.mouse.get_pos()
-                vmx = mx * (VIRTUAL_WIDTH / screen.get_width())
-                vmy = my * (VIRTUAL_HEIGHT / screen.get_height())
-
                 if state == STATE_MENU and show_help:
                     help_scroll_y += event.y * 30
                     if help_scroll_y < 0: help_scroll_y = 0
@@ -287,40 +288,32 @@ def main():
             elif event.type == pygame.VIDEORESIZE:
                 screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
 
-        # Обновление (UPDATE)
+        # UPDATE
         if state == STATE_MENU:
             for c in menu_coins:
                 c.update(dt, VIRTUAL_WIDTH, VIRTUAL_HEIGHT)
-            _handle_menu_collisions(menu_coins)  # Физика меню
+            _handle_menu_collisions(menu_coins)
         elif state == STATE_GAME:
             game.update(dt)
             ui.update(game.balance.get(), game.get_coin_counts())
 
-        # Отрисовка (DRAW)
-        canvas.fill((255, 255, 255))  # Белый фон
+        # DRAW
+        canvas.fill((255, 255, 255))
 
         if state == STATE_MENU:
-            # 1. Рисуем монеты
             for c in menu_coins:
                 c.draw(canvas, VIRTUAL_HEIGHT)
 
-            # 2. Полупрозрачная подложка
             overlay = pygame.Surface((VIRTUAL_WIDTH, VIRTUAL_HEIGHT), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 50))
             canvas.blit(overlay, (0, 0))
 
             if not show_help:
-                # Заголовок
-                title_surf = title_font.render("Incremental Coin Game", True, (0, 0, 0))
+                title_surf = title_font.render(get_text("menu_title"), True, (0, 0, 0))
                 title_rect = title_surf.get_rect(center=(VIRTUAL_WIDTH // 2, VIRTUAL_HEIGHT * 0.2))
                 canvas.blit(title_surf, title_rect)
 
-                # Кнопки меню
-                mx, my = pygame.mouse.get_pos()
-                vmx = mx * (VIRTUAL_WIDTH / screen.get_width())
-                vmy = my * (VIRTUAL_HEIGHT / screen.get_height())
-
-                buttons = [(btn_play_rect, "Играть"), (btn_help_rect, "Как играть?"), (btn_exit_rect, "Выйти")]
+                buttons = [(btn_play_rect, get_text("btn_play")), (btn_help_rect, get_text("btn_help"))]
                 for rect, text in buttons:
                     color = (100, 100, 100) if rect.collidepoint(vmx, vmy) else (50, 50, 50)
                     pygame.draw.rect(canvas, color, rect, border_radius=5)
@@ -329,48 +322,82 @@ def main():
                     txt_rect = txt_surf.get_rect(center=rect.center)
                     canvas.blit(txt_surf, txt_rect)
 
+                # Кнопки настроек (Язык, Звук)
+                for rect, text_key in [(btn_lang_rect, "lang_" + current_lang),
+                                       (btn_sound_rect, "sound_on" if not sound_manager.muted else "sound_off")]:
+                    color = (70, 70, 70) if rect.collidepoint(vmx, vmy) else (50, 50, 50)
+                    pygame.draw.rect(canvas, color, rect, border_radius=5)
+                    pygame.draw.rect(canvas, (150, 150, 150), rect, 2, border_radius=5)
+                    txt_surf = main_font.render(get_text(text_key), True, (255, 255, 255))
+                    txt_rect = txt_surf.get_rect(center=rect.center)
+                    canvas.blit(txt_surf, txt_rect)
+
             else:
-                # Окно "Как играть"
                 help_x = (VIRTUAL_WIDTH - help_w) // 2
                 help_y = (VIRTUAL_HEIGHT - help_h) // 2
-
                 pygame.draw.rect(canvas, (30, 30, 30), (help_x, help_y, help_w, help_h))
                 pygame.draw.rect(canvas, (255, 255, 255), (help_x, help_y, help_w, help_h), 2)
 
-                # Текст справки
                 help_lines = [
-                    "ОСНОВНАЯ ЦЕЛЬ:", "Накапливайте баланс, покупайте улучшения.", "",
-                    "ГЕЙМПЛЕЙ:", "Нажмите на монетку, чтобы подбросить её.",
-                    "Если выпадет Орел, вы получаете деньги.", "Если Решка - ничего.",
-                    "", "СЛИЯНИЕ:", "5 Бронзовых -> 1 Серебряная", "3 Серебряных -> 1 Золотая",
-                    "", "Удачи!"
+                    get_text("help_goal"), get_text("help_goal_text"), "",
+                    get_text("help_gameplay"), get_text("help_gameplay_text"), "",
+                    get_text("help_fusion"), get_text("help_fusion_text"), "",
+                    get_text("help_luck")
                 ]
 
-                # Отрисовка текста с обрезкой
                 clip_rect = pygame.Rect(help_x, help_y, help_w, help_h)
                 canvas.set_clip(clip_rect)
 
                 text_y = help_y + 20 + help_scroll_y
                 for line in help_lines:
-                    l_surf = main_font.render(line, True, (200, 200, 200))
-                    canvas.blit(l_surf, (help_x + 20, text_y))
+                    if "\n" in line:
+                        parts = line.split("\n")
+                        for part in parts:
+                            l_surf = main_font.render(part, True, (200, 200, 200))
+                            canvas.blit(l_surf, (help_x + 20, text_y))
+                            text_y += 25
+                    else:
+                        l_surf = main_font.render(line, True, (200, 200, 200))
+                        canvas.blit(l_surf, (help_x + 20, text_y))
                     text_y += 25
 
                 canvas.set_clip(None)
 
-                # Кнопка закрытия (X)
                 close_btn_size = 30
                 close_rect = pygame.Rect(help_x + help_w - close_btn_size - 10, help_y + 10, close_btn_size,
                                          close_btn_size)
                 pygame.draw.rect(canvas, (200, 50, 50), close_rect, border_radius=5)
-                x_surf = main_font.render("X", True, (255, 255, 255))
+                x_surf = main_font.render(get_text("btn_close"), True, (255, 255, 255))
                 canvas.blit(x_surf, x_surf.get_rect(center=close_rect.center))
 
         elif state == STATE_GAME:
+            # --- Отрисовка кнопок в ИГРЕ ---
+
+            # Кнопка Языка (показывает целевой язык)
+            next_lang = "en" if current_lang == "ru" else "ru"
+            lang_btn_text = get_text(f"lang_{next_lang}")
+            lang_color = (50, 50, 50)
+            if game_lang_rect.collidepoint(vmx, vmy):
+                lang_color = (70, 70, 70)
+            pygame.draw.rect(canvas, lang_color, game_lang_rect, border_radius=5)
+            pygame.draw.rect(canvas, (200, 200, 200), game_lang_rect, 2, border_radius=5)
+            lang_surf = main_font.render(lang_btn_text, True, (255, 255, 255))
+            canvas.blit(lang_surf, lang_surf.get_rect(center=game_lang_rect.center))
+
+            # Кнопка Звука
+            sound_color = (50, 50, 50)
+            if game_mute_rect.collidepoint(vmx, vmy):
+                sound_color = (70, 70, 70)
+            pygame.draw.rect(canvas, sound_color, game_mute_rect, border_radius=5)
+            pygame.draw.rect(canvas, (200, 200, 200), game_mute_rect, 2, border_radius=5)
+            sound_status_text = "ON" if not sound_manager.muted else "OFF"
+            sound_surf = main_font.render(sound_status_text, True, (255, 255, 255))
+            canvas.blit(sound_surf, sound_surf.get_rect(center=game_mute_rect.center))
+
+            # --- Сама игра ---
             game.draw(canvas, VIRTUAL_HEIGHT)
             ui.draw(canvas, VIRTUAL_HEIGHT, game.balance.get())
 
-        # Масштабирование на весь экран и показ
         pygame.transform.smoothscale(canvas, (screen.get_width(), screen.get_height()), screen)
         pygame.display.flip()
 

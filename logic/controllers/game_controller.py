@@ -323,9 +323,7 @@ class GameController:
                 if self.game_over_text_alpha > 0:
                     self.game_over_text_alpha -= dt * 300
                 else:
-                    # pygame.quit()
-                    # sys.exit()
-                    pass  # Выход обрабатывается в main loop
+                    pass
 
         if not self.game_over_active:
             self.coins = [c for c in self.coins if
@@ -398,9 +396,12 @@ class GameController:
                     if hit_ground:
                         impact_x = self.meteor.center_x
                         impact_y = self.meteor.center_y
-                        if self.sound_manager.boom_sound:
+
+                        # ИСПРАВЛЕНИЕ: Звук только если не выключен
+                        if self.sound_manager.boom_sound and not self.sound_manager.muted:
                             self.sound_manager.boom_sound.set_volume(self.meteor_volume)
                             self.sound_manager.boom_sound.play()
+
                         if self.assets.explosion_textures:
                             expl = Explosion(impact_x, impact_y, self.assets.explosion_textures)
                             self.explosions.append(expl)
@@ -439,7 +440,6 @@ class GameController:
                 if spawn_smoke and self.meteor:
                     self.create_particles(self.meteor.center_x, self.meteor.center_y, (100, 100, 100, 150))
 
-                # Обновляем взрывы
                 for expl in self.explosions[:]:
                     if not expl.update(dt):
                         self.explosions.remove(expl)
@@ -450,7 +450,6 @@ class GameController:
                 self.grabbed_coin.vx = 0
                 self.grabbed_coin.vy = 0
 
-            # Пересоздаем Spatial Hash каждый кадр
             self.spatial_hash = SpatialHash(cell_size=int(150 * self.scale_factor))
             for coin in self.coins:
                 self.spatial_hash.add(coin.sprite)
@@ -501,7 +500,9 @@ class GameController:
                             lx = coin.sprite.right + 10
                             ly = coin.sprite.top - 10
                             self.create_floating_text("x5", lx, ly, (50, 255, 50, 255), coin)
-                            if self.sound_manager.lucky_success:
+
+                            # ИСПРАВЛЕНИЕ: Звук только если не выключен
+                            if self.sound_manager.lucky_success and not self.sound_manager.muted:
                                 self.sound_manager.lucky_success.play()
                             coin.sound_played = True
 
@@ -515,12 +516,15 @@ class GameController:
                             cx = coin.sprite.right + 10
                             cy = coin.sprite.top - 10
                             self.create_floating_text("x100", cx, cy, (255, 50, 50, 255), coin)
-                            if self.sound_manager.cursed_success:
+
+                            # ИСПРАВЛЕНИЕ: Звук только если не выключен
+                            if self.sound_manager.cursed_success and not self.sound_manager.muted:
                                 self.sound_manager.cursed_success.play()
                             coin.sound_played = True
 
                         if coin.bankruptcy_triggered:
-                            if self.sound_manager.cursed_fail:
+                            # ИСПРАВЛЕНИЕ: Звук только если не выключен
+                            if self.sound_manager.cursed_fail and not self.sound_manager.muted:
                                 self.sound_manager.cursed_fail.play()
                             cx_pos, cy_pos = coin.sprite.center_x, coin.sprite.center_y
                             self.balance.set(0)
@@ -561,8 +565,6 @@ class GameController:
 
             for zone in self.zones:
                 zone.update(dt, width, height)
-
-            # Обновление взрывов уже выше
 
             for p in self.particles[:]:
                 decay_speed = p.get('decay_speed', 1.0)
@@ -606,7 +608,7 @@ class GameController:
 
             for ft in self.floating_texts[:]:
                 ft['life'] -= dt
-                ft['y'] += ft['vy'] * dt  # Moving up
+                ft['y'] += ft['vy'] * dt
                 ft['x'] += ft['vx'] * dt
                 if ft['linked_coin'] is not None:
                     if ft['linked_coin'] not in self.coins:
@@ -966,10 +968,6 @@ class GameController:
                         max_level = b.max_level
                         break
 
-        if upgrade_id == "finish_game":
-            self.save_game()
-            # arcade.close_window()
-            return True
         if upgrade_id == "new_game":
             self.reset_game()
             return True
@@ -1694,8 +1692,10 @@ class GameController:
 
     def kill_beetle(self) -> None:
         if not self.beetle: return
-        if self.sound_manager.beetle_dead_sound:
-            self.sound_manager.beetle_dead_sound.play()
+        # ИСПРАВЛЕНИЕ: Звук только если не выключен
+        if self.beetle_dead_sound and not self.sound_manager.muted:
+            self.beetle_dead_sound.play()
+
         reward = int(self.beetle_stash * 5)
         self.balance.add(reward)
         self.beetle_stash = 0
@@ -1767,7 +1767,11 @@ class GameController:
         max_y = self.height - margin
         target_x = random.uniform(min_x, max_x)
         target_y = random.uniform(min_y, max_y)
-        self.tornado = Tornado(target_x, target_y, self.assets.tornado_textures, self.sound_manager.tornado_sound,
+
+        # ИСПРАВЛЕНИЕ: Передаем None, если звук выключен, чтобы Tornado не пытался его воспроизвести
+        tornado_sound = None if self.sound_manager.muted else self.sound_manager.tornado_sound
+
+        self.tornado = Tornado(target_x, target_y, self.assets.tornado_textures, tornado_sound,
                                scale=2.0 * self.scale_factor, world_scale=self.scale_factor, world_width=self.width)
         self.tornado.pull_radius = (self.width / 3.0) * self.scale_factor
         self.tornado_list.clear()

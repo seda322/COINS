@@ -2,7 +2,9 @@ import pygame
 import os
 from dataclasses import dataclass
 from typing import Optional, List, Dict
-
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from localization import get_text
 
 # --- Вспомогательные классы ---
 @dataclass
@@ -58,100 +60,91 @@ class UIController:
         else:
             self.base_font = pygame.font.SysFont("Arial", 20)
 
-        # --- НАСТРОЙКИ ЛАЙАУТА (Увеличены для удобства) ---
-        self.header_height = int(80 * self.scale_factor) # Было 70
+        # --- НАСТРОЙКИ ЛАЙАУТА ---
+        self.header_height = int(80 * self.scale_factor)
         self.tab_bar_height = int(50 * self.scale_factor)
-        self.padding = int(20 * self.scale_factor)     # Было 16
-        self.btn_height = int(70 * self.scale_factor)   # Было 64 (Кнопки выше)
+        self.padding = int(20 * self.scale_factor)
+        self.btn_height = int(70 * self.scale_factor)
         self.group_header_height = int(40 * self.scale_factor)
         self.btn_gap = int(10 * self.scale_factor)
 
+        # Инициализируем вкладки с локализацией
         self.tabs = [
-            _TabStub(0, "Монетки"),
-            _TabStub(1, "Карта"),
-            _TabStub(2, "Общее"),
+            _TabStub(0, get_text("tab_coins")),
+            _TabStub(1, get_text("tab_map")),
+            _TabStub(2, get_text("tab_general")),
         ]
         self.active_tab_index = 0
         self.tab_content: Dict[int, List[_UiGroupStub]] = {}
 
-        # === ВКЛАДКА 0 ===
+        # === ВКЛАДКА 0 (ИЗМЕНЕННЫЕ НАЗВАНИЯ НА КЛЮЧИ) ===
         self.tab_content[0] = [
-            _UiGroupStub("Бронзовая монетка", [
-                _UiButtonStub("buy_bronze_coin", "Купить бронзовую монетку", "Купить бронзовую", 10, is_one_time=False,
-                              level=1, max_level=-1),
-                _UiButtonStub("bronze_value_upgrade", "Цена бронзовой монетки x2", "Цена бронзовой x2", 50,
-                              is_one_time=False, level=0, max_level=50),
+            _UiGroupStub(get_text("grp_bronze"), [
+                _UiButtonStub("buy_bronze_coin", "", "btn_buy_bronze", 10, is_one_time=False, level=1, max_level=-1),
+                _UiButtonStub("bronze_value_upgrade", "", "btn_bronze_val", 50, is_one_time=False, level=0,
+                              max_level=50),
             ]),
-            _UiGroupStub("Серебряная монетка", [
-                _UiButtonStub("silver_crit_chance_upgrade", "Шанс крита серебрянной монетки", "Шанс крита", 500,
-                              is_one_time=False, level=1, max_level=50),
-                _UiButtonStub("silver_crit_upgrade", "Размер крита серебра", "Размер крита", 2000, is_one_time=False,
-                              level=1, max_level=20),
-                _UiButtonStub("silver_value_upgrade", "Цена серебрянной монетки x2", "Цена серебрянной x2", 1000,
-                              is_one_time=False, level=0, max_level=50),
+            _UiGroupStub(get_text("grp_silver"), [
+                _UiButtonStub("silver_crit_chance_upgrade", "", "btn_silver_crit", 500, is_one_time=False, level=1,
+                              max_level=50),
+                _UiButtonStub("silver_crit_upgrade", "", "btn_silver_crit_size", 2000, is_one_time=False, level=1,
+                              max_level=20),
+                _UiButtonStub("silver_value_upgrade", "", "btn_silver_val", 1000, is_one_time=False, level=0,
+                              max_level=50),
             ]),
-            _UiGroupStub("Золотая монетка", [
-                _UiButtonStub("gold_explosion_upgrade", "Золотая переворачивает другие",
-                              "Золотая переворачивает другие", 15000, is_one_time=True),
-                _UiButtonStub("grab_upgrade", "Взять золотую на ПКМ", "Взять золотую на ПКМ", 25000, is_one_time=True),
-                _UiButtonStub("gold_value_upgrade", "Цена золотой монетки x2", "Цена золотой x2", 5000,
-                              is_one_time=False, level=0, max_level=50),
+            _UiGroupStub(get_text("grp_gold"), [
+                _UiButtonStub("gold_explosion_upgrade", "", "btn_gold_explode", 15000, is_one_time=True),
+                _UiButtonStub("grab_upgrade", "", "btn_grab", 25000, is_one_time=True),
+                _UiButtonStub("gold_value_upgrade", "", "btn_gold_val", 5000, is_one_time=False, level=0, max_level=50),
             ]),
-            _UiGroupStub("Комбо", [
-                _UiButtonStub("unlock_combo", "Открыть комбо", "Открыть комбо", 50000000, is_one_time=True),
-                _UiButtonStub("upgrade_combo_limit", "Лимит комбо", "Лимит комбо", 100000000, is_one_time=False,
-                              level=1, max_level=10),
-            ]),
-            _UiGroupStub("Общее для монеток", [
-                _UiButtonStub("auto_flip_upgrade", "Авто-переворот", "Авто-переворот", 1000, is_one_time=False, level=0,
+            _UiGroupStub(get_text("grp_combo"), [
+                _UiButtonStub("unlock_combo", "", "btn_unlock_combo", 50000000, is_one_time=True),
+                _UiButtonStub("upgrade_combo_limit", "", "btn_combo_limit", 100000000, is_one_time=False, level=1,
                               max_level=10),
-                _UiButtonStub("fuse_to_silver", "Слияние в серебро (5->1)", "Слияние в серебро", 0, is_one_time=False,
-                              max_level=-1),
-                _UiButtonStub("fuse_to_gold", "Слияние в золото (3->1)", "Слияние в золото", 0, is_one_time=False,
-                              max_level=-1),
+            ]),
+            _UiGroupStub(get_text("grp_common"), [
+                _UiButtonStub("auto_flip_upgrade", "", "btn_autoflip", 1000, is_one_time=False, level=0, max_level=10),
+                _UiButtonStub("fuse_to_silver", "", "btn_fuse_silver", 0, is_one_time=False, max_level=-1),
+                _UiButtonStub("fuse_to_gold", "", "btn_fuse_gold", 0, is_one_time=False, max_level=-1),
             ])
         ]
         # === ВКЛАДКА 1 ===
         self.tab_content[1] = [
-            _UiGroupStub("Летающий висп", [
-                _UiButtonStub("wisp_spawn", "Висп", "Висп", 50000, is_one_time=True),
-                _UiButtonStub("wisp_speed", "Скорость виспа", "Скорость виспа", 10000, is_one_time=False, level=0,
-                              max_level=30),
-                _UiButtonStub("wisp_size", "Размер виспа", "Размер виспа", 10000, is_one_time=False, level=0,
-                              max_level=30),
+            _UiGroupStub(get_text("grp_wisp"), [
+                _UiButtonStub("wisp_spawn", "", "btn_wisp", 50000, is_one_time=True),
+                _UiButtonStub("wisp_speed", "", "btn_wisp_speed", 10000, is_one_time=False, level=0, max_level=30),
+                _UiButtonStub("wisp_size", "", "btn_wisp_size", 10000, is_one_time=False, level=0, max_level=30),
             ]),
-            _UiGroupStub("Зона x2", [
-                _UiButtonStub("spawn_zone_2", "Зона x2", "Зона x2", 80000, is_one_time=True),
-                _UiButtonStub("upgrade_zone_2_size", "Размер зоны x2", "Размер зоны x2", 20000, is_one_time=False,
-                              level=0, max_level=20),
-                _UiButtonStub("upgrade_zone_2_mult", "Множитель зоны x2", "Множитель зоны x2", 40000, is_one_time=False,
-                              level=0, max_level=10),
+            _UiGroupStub(get_text("grp_zone2"), [
+                _UiButtonStub("spawn_zone_2", "", "btn_spawn_zone2", 80000, is_one_time=True),
+                _UiButtonStub("upgrade_zone_2_size", "", "btn_zone2_size", 20000, is_one_time=False, level=0,
+                              max_level=20),
+                _UiButtonStub("upgrade_zone_2_mult", "", "btn_zone2_mult", 40000, is_one_time=False, level=0,
+                              max_level=10),
             ]),
-            _UiGroupStub("Зона x5", [
-                _UiButtonStub("spawn_zone_5", "Зона x5", "Зона x5", 500000, is_one_time=True),
-                _UiButtonStub("upgrade_zone_5_size", "Размер зоны x5", "Размер зоны x5", 100000, is_one_time=False,
-                              level=0, max_level=20),
-                _UiButtonStub("upgrade_zone_5_mult", "Множитель зоны x5", "Множитель зоны x5", 200000,
-                              is_one_time=False, level=0, max_level=10),
+            _UiGroupStub(get_text("grp_zone5"), [
+                _UiButtonStub("spawn_zone_5", "", "btn_spawn_zone5", 500000, is_one_time=True),
+                _UiButtonStub("upgrade_zone_5_size", "", "btn_zone5_size", 100000, is_one_time=False, level=0,
+                              max_level=20),
+                _UiButtonStub("upgrade_zone_5_mult", "", "btn_zone5_mult", 200000, is_one_time=False, level=0,
+                              max_level=10),
             ]),
-            _UiGroupStub("Торнадо", [
-                _UiButtonStub("spawn_tornado", "Торнадо", "Торнадо", 2000000, is_one_time=True),
-                _UiButtonStub("tornado_cooldown_upgrade", "КД Торнадо", "КД Торнадо", 500000, is_one_time=False,
-                              level=0, max_level=10),
+            _UiGroupStub(get_text("grp_tornado"), [
+                _UiButtonStub("spawn_tornado", "", "btn_spawn_tornado", 2000000, is_one_time=True),
+                _UiButtonStub("tornado_cooldown_upgrade", "", "btn_tornado_cd", 500000, is_one_time=False, level=0,
+                              max_level=10),
             ]),
-            _UiGroupStub("Метеорит", [
-                _UiButtonStub("spawn_meteor", "Метеорит", "Метеорит", 10000000, is_one_time=True),
-                _UiButtonStub("meteor_cooldown_upgrade", "КД метеорита", "КД метеорита", 2000000, is_one_time=False,
-                              level=0, max_level=10),
+            _UiGroupStub(get_text("grp_meteor"), [
+                _UiButtonStub("spawn_meteor", "", "btn_spawn_meteor", 10000000, is_one_time=True),
+                _UiButtonStub("meteor_cooldown_upgrade", "", "btn_meteor_cd", 2000000, is_one_time=False, level=0,
+                              max_level=10),
             ]),
         ]
-        # === ВКЛАДКА 2 ===
+        # === ВКЛАДКА 2 (УБРАЛИ FINISH_GAME) ===
         self.tab_content[2] = [
-            _UiGroupStub("Настройки", [
-                _UiButtonStub("new_game", "Новая игра(потерять прогресс)", "Новая игра", 0, is_one_time=True),
-                _UiButtonStub("finish_game", "Выйти из игры", "Выйти", 0, is_one_time=True),
-                _UiButtonStub("buy_victory", "Победа??", "Победа", 10_000_000_000_000_000_000_000_000,
-                              is_one_time=True),
+            _UiGroupStub(get_text("grp_settings"), [
+                _UiButtonStub("new_game", "", "btn_new_game", 0, is_one_time=True),
+                _UiButtonStub("buy_victory", "", "btn_victory", 10_000_000_000_000_000_000_000_000, is_one_time=True),
             ]),
         ]
 
@@ -173,11 +166,13 @@ class UIController:
 
         self.scroll_y = 0
 
-        self.font_size_header = int(32 * self.scale_factor) # Было 30
-        self.font_size_balance = int(30 * self.scale_factor) # Было 28
-        self.font_size_button = int(22 * self.scale_factor)  # Было 19 (Шрифт больше)
+        self.font_size_header = int(32 * self.scale_factor)
+        self.font_size_balance = int(30 * self.scale_factor)
+        self.font_size_button = int(22 * self.scale_factor)
         self.font_size_tab = int(18 * self.scale_factor)
-        self.font_size_group = int(22 * self.scale_factor)  # Было 20
+        self.font_size_group = int(22 * self.scale_factor)
+
+        self.reload_texts()
 
     def _format_number(self, num: int) -> str:
         if num == 0: return "0"
@@ -249,36 +244,27 @@ class UIController:
             for grp in tab_groups:
                 for b in grp.buttons:
 
-                    # --- ФИНАЛЬНАЯ ПРОВЕРКА (Исправление белых кнопок) ---
-                    # Если в названии уже написано "Макс.", отключаем кнопку насильно
                     if "Макс." in b.title or "(Max.)" in b.title:
                         self._enabled[b.upgrade_id] = False
-                        continue  # Переходим к следующей кнопке
-                    # ----------------------------------------------------------
-
-                    # 1. Системные кнопки
-                    if b.upgrade_id in ["new_game", "finish_game"]:
-                        self._enabled[b.upgrade_id] = True
-                        b.title = b.base_name
                         continue
 
-                    # 2. Победа
+                    if b.upgrade_id == "new_game":
+                        self._enabled[b.upgrade_id] = True
+                        b.title = get_text("btn_new_game")
+                        continue
+
                     if b.upgrade_id == "buy_victory":
                         self._enabled[b.upgrade_id] = balance_value >= b.base_cost
                         continue
 
-                    # 3. Проверка Максимального Уровня (Дублирование защиты)
                     if b.max_level > 0 and b.level >= b.max_level:
-                        b.title = f"{b.base_name} (Макс.)"
+                        b.title = f"{b.base_name} ({get_text('status_max')})"
                         self._enabled[b.upgrade_id] = False
                         continue
 
-                    # 4. Если уже куплено
                     if b.is_purchased:
                         self._enabled[b.upgrade_id] = False
                         continue
-
-                    # --- ЛОГИКА СПЕЦИАЛЬНЫХ КНОПОК (Остальное без изменений) ---
 
                     elif b.upgrade_id == "silver_crit_upgrade":
                         self._enabled[b.upgrade_id] = balance_value >= b.base_cost
@@ -294,7 +280,7 @@ class UIController:
 
                     elif b.upgrade_id == "wisp_spawn":
                         if self._has_wisp:
-                            b.title = "Висп уже призван"
+                            b.title = f"{get_text('btn_wisp')} ({get_text('status_purchased')})"
                             self._enabled[b.upgrade_id] = False
                         else:
                             self._enabled[b.upgrade_id] = balance_value >= b.base_cost
@@ -303,13 +289,13 @@ class UIController:
 
                     elif b.upgrade_id == "spawn_zone_2":
                         if self._has_zone_2:
-                            b.title = "Зона x2 (Куплено)"
+                            b.title = f"{get_text('btn_spawn_zone2')} ({get_text('status_purchased')})"
                             self._enabled[b.upgrade_id] = False
                         else:
                             self._enabled[b.upgrade_id] = balance_value >= b.base_cost
                     elif b.upgrade_id == "spawn_zone_5":
                         if self._has_zone_5:
-                            b.title = "Зона x5 (Куплено)"
+                            b.title = f"{get_text('btn_spawn_zone5')} ({get_text('status_purchased')})"
                             self._enabled[b.upgrade_id] = False
                         else:
                             self._enabled[b.upgrade_id] = balance_value >= b.base_cost
@@ -329,7 +315,7 @@ class UIController:
 
                     elif b.upgrade_id == "spawn_tornado":
                         if self._has_tornado:
-                            b.title = "Торнадо (Куплено)"
+                            b.title = f"{get_text('btn_spawn_tornado')} ({get_text('status_purchased')})"
                             self._enabled[b.upgrade_id] = False
                         else:
                             self._enabled[b.upgrade_id] = balance_value >= b.base_cost
@@ -345,19 +331,19 @@ class UIController:
                     elif b.upgrade_id == "fuse_to_silver":
                         if coin_counts and coin_counts.get('bronze', 0) >= 5:
                             self._enabled[b.upgrade_id] = True
-                            b.title = f"Слияние в серебро (5->1)"
+                            b.title = f"{get_text('btn_fuse_silver')} (5->1)"
                         else:
                             self._enabled[b.upgrade_id] = False
                             needed = 5 - coin_counts.get('bronze', 0) if coin_counts else 5
-                            b.title = f"Слияние в серебро (нужно {needed})"
+                            b.title = f"{get_text('btn_fuse_silver')} ({get_text('status_fuse_need')} {needed})"
                     elif b.upgrade_id == "fuse_to_gold":
                         if coin_counts and coin_counts.get('silver', 0) >= 3:
                             self._enabled[b.upgrade_id] = True
-                            b.title = f"Слияние в золото (3->1)"
+                            b.title = f"{get_text('btn_fuse_gold')} (3->1)"
                         else:
                             self._enabled[b.upgrade_id] = False
                             needed = 3 - coin_counts.get('silver', 0) if coin_counts else 3
-                            b.title = f"Слияние в золото (нужно {needed})"
+                            b.title = f"{get_text('btn_fuse_gold')} ({get_text('status_fuse_need')} {needed})"
 
                     elif b.upgrade_id == "auto_flip_upgrade":
                         self._enabled[b.upgrade_id] = balance_value >= b.base_cost
@@ -367,82 +353,55 @@ class UIController:
                         self._enabled[b.upgrade_id] = balance_value >= b.base_cost
 
     def draw(self, surface, screen_height, balance_value: int) -> None:
-        # 1. Фон панели (Серый)
         pygame.draw.rect(surface, (200, 200, 200), (self.panel_x, 0, self.panel_width, self.panel_height))
-
-        # Координаты на экране
         header_rect = pygame.Rect(self.panel_x, 0, self.panel_width, self.header_height)
         tabs_rect = pygame.Rect(self.panel_x, self.header_height, self.panel_width, self.tab_bar_height)
 
-        # 2. Рисуем Хедер (Темный фон, Баланс сверху)
         pygame.draw.rect(surface, (50, 50, 50), header_rect)
 
-        # Заголовок текст
-        head_font = pygame.font.Font(self.game_font_path,
-                                     self.font_size_header) if self.game_font_path else pygame.font.SysFont("Arial",
-                                                                                                            self.font_size_header)
-        title_surf = head_font.render("Апгрейды", True, (200, 200, 200))
+        head_font = pygame.font.Font(self.game_font_path, self.font_size_header) if self.game_font_path else pygame.font.SysFont("Arial", self.font_size_header)
+        title_surf = head_font.render(get_text("ui_upgrades"), True, (200, 200, 200))
         surface.blit(title_surf, (self.panel_x + self.padding, 20))
 
-        # Баланс текст (Справа вверху)
         formatted_balance = self._format_number(balance_value)
-        bal_font = pygame.font.Font(self.game_font_path,
-                                    self.font_size_balance) if self.game_font_path else pygame.font.SysFont("Arial",
-                                                                                                            self.font_size_balance)
-        bal_surf = bal_font.render(f"Баланс: {formatted_balance}", True, (255, 255, 255))
+        bal_font = pygame.font.Font(self.game_font_path, self.font_size_balance) if self.game_font_path else pygame.font.SysFont("Arial", self.font_size_balance)
+        bal_surf = bal_font.render(f"{get_text('ui_balance')}: {formatted_balance}", True, (255, 255, 255))
         bal_rect = bal_surf.get_rect(midright=(self.panel_x + self.panel_width - 20, self.header_height / 2))
         surface.blit(bal_surf, bal_rect)
 
-        # 3. Рисуем Табы
         self._draw_tab_bar(surface, tabs_rect)
 
-        # 4. Рисуем Контент (С обрезкой и скроллом)
         content_start_y = self.header_height + self.tab_bar_height
         content_height = self.panel_height - content_start_y
         clip_rect = pygame.Rect(self.panel_x, content_start_y, self.panel_width, content_height)
-
         surface.set_clip(clip_rect)
 
-        # Смещение для рисования
         current_draw_y = content_start_y - self.scroll_y
 
-        group_font = pygame.font.Font(self.game_font_path,
-                                      self.font_size_group) if self.game_font_path else pygame.font.SysFont("Arial",
-                                                                                                            self.font_size_group)
-        btn_font = pygame.font.Font(self.game_font_path,
-                                    self.font_size_button) if self.game_font_path else pygame.font.SysFont("Arial",
-                                                                                                           self.font_size_button)
+        group_font = pygame.font.Font(self.game_font_path, self.font_size_group) if self.game_font_path else pygame.font.SysFont("Arial", self.font_size_group)
+        btn_font = pygame.font.Font(self.game_font_path, self.font_size_button) if self.game_font_path else pygame.font.SysFont("Arial", self.font_size_button)
 
         groups = self.tab_content.get(self.active_tab_index, [])
 
         for grp in groups:
-            # Заголовок группы
             grp_surf = group_font.render(grp.title, True, (30, 30, 30))
             surface.blit(grp_surf, (self.panel_x + self.padding, current_draw_y + 10))
-            pygame.draw.line(surface, (100, 100, 100), (self.panel_x + self.padding, current_draw_y + 35),
-                             (self.panel_x + self.panel_width - self.padding, current_draw_y + 35), 1)
+            pygame.draw.line(surface, (100, 100, 100), (self.panel_x + self.padding, current_draw_y + 35), (self.panel_x + self.panel_width - self.padding, current_draw_y + 35), 1)
 
             current_draw_y += self.group_header_height
 
-            # Кнопки
             for b in grp.buttons:
-                # Если кнопка вышла за пределы видимости снизу - прерываем (оптимизация)
-                if current_draw_y > content_start_y + content_height:
-                    break
+                if current_draw_y > content_start_y + content_height: break
 
                 enabled = self._enabled.get(b.upgrade_id, True)
                 is_pressed = (self._pressed_id == b.upgrade_id)
-                y_draw = current_draw_y + (6 if is_pressed else 0)  # Эффект нажатия
+                y_draw = current_draw_y + (6 if is_pressed else 0)
 
-                # Рисуем кнопку
                 texture_to_draw = None
                 if self.ui_assets["btn_normal"]:
-                    if not enabled:
-                        texture_to_draw = self.ui_assets["btn_disabled"]
-                    elif is_pressed:
-                        texture_to_draw = self.ui_assets["btn_pressed"]
-                    else:
-                        texture_to_draw = self.ui_assets["btn_normal"]
+                    if not enabled: texture_to_draw = self.ui_assets["btn_disabled"]
+                    elif is_pressed: texture_to_draw = self.ui_assets["btn_pressed"]
+                    else: texture_to_draw = self.ui_assets["btn_normal"]
 
                 btn_w = self.panel_width - (self.padding * 2)
 
@@ -452,18 +411,15 @@ class UIController:
                 else:
                     fill = (255, 255, 255) if enabled else (150, 150, 150)
                     pygame.draw.rect(surface, fill, (self.panel_x + self.padding, y_draw, btn_w, self.btn_height))
-                    pygame.draw.rect(surface, (50, 50, 50),
-                                     (self.panel_x + self.padding, y_draw, btn_w, self.btn_height), 1)
+                    pygame.draw.rect(surface, (50, 50, 50), (self.panel_x + self.padding, y_draw, btn_w, self.btn_height), 1)
 
-                # Текст кнопки
                 color = (50, 50, 50) if enabled else (100, 100, 100)
                 text_surf = btn_font.render(b.title, True, color)
                 surface.blit(text_surf, (self.panel_x + self.padding + 14, y_draw + 22))
 
                 current_draw_y += self.btn_height + self.btn_gap
 
-            current_draw_y += 20  # Отступ между группами
-
+            current_draw_y += 20
         surface.set_clip(None)
 
     def _draw_tab_bar(self, surface, rect):
@@ -578,3 +534,45 @@ class UIController:
                         b.title = f"{b.base_name} ({b.purchased_text})"
                         self._enabled[upgrade_id] = False
                         return
+
+    def reload_texts(self):
+        # Обновляем вкладки
+        self.tabs[0].title = get_text("tab_coins")
+        self.tabs[1].title = get_text("tab_map")
+        self.tabs[2].title = get_text("tab_general")
+
+        # Словарь ключей для групп
+        group_keys = {
+            0: ["grp_bronze", "grp_silver", "grp_gold", "grp_combo", "grp_common"],
+            1: ["grp_wisp", "grp_zone2", "grp_zone5", "grp_tornado", "grp_meteor"],
+            2: ["grp_settings"]
+        }
+
+        for tab_idx, groups in self.tab_content.items():
+            grp_keys_list = group_keys.get(tab_idx, [])
+            for i, grp in enumerate(groups):
+                if i < len(grp_keys_list):
+                    grp.title = get_text(grp_keys_list[i])
+
+                for b in grp.buttons:
+                    # ВАЖНО: base_name НЕ МЕНЯЕМ, это ключ словаря (например "btn_wisp")
+
+                    if b.is_purchased:
+                        b.title = f"{get_text(b.base_name)} ({get_text('status_purchased')})"
+
+                    elif not self._enabled.get(b.upgrade_id, True):
+                        # Кнопка отключена (Макс уровень или уже куплено в логике)
+                        if b.max_level > 0 and b.level >= b.max_level:
+                            b.title = f"{get_text(b.base_name)} ({get_text('status_max')})"
+
+                        elif b.upgrade_id in ["wisp_spawn", "spawn_zone_2", "spawn_zone_5", "spawn_tornado",
+                                              "spawn_meteor"]:
+                            # Спец-кнопки которые становятся "Куплено"
+                            b.title = f"{get_text(b.base_name)} ({get_text('status_purchased')})"
+
+                        elif "fuse" in b.upgrade_id:
+                            # Слияния (сохраняем число)
+                            import re
+                            match = re.search(r'\d+', b.title)
+                            num = match.group(0) if match else "0"
+                            b.title = f"{get_text(b.base_name)} ({get_text('status_fuse_need')} {num})"

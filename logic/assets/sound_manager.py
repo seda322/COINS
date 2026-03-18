@@ -6,6 +6,7 @@ import sys
 
 class SoundManager:
     def __init__(self) -> None:
+        self.muted = False
         self.bronze_toss_sounds = []
         self.bronze_landing_sounds = []
 
@@ -153,6 +154,8 @@ class SoundManager:
         print(f"  -> WARNING: No sounds found for {label}!")
 
     def play_toss(self, coin_type: str) -> None:
+        if self.muted: return  # <--- ПРОВЕРКА
+
         if coin_type == "gold":
             sound = self._pick_sound(self.gold_toss_sounds, self._last_gold_toss)
             self._last_gold_toss = sound
@@ -167,6 +170,8 @@ class SoundManager:
             sound.play()
 
     def play_land(self, coin_type: str) -> None:
+        if self.muted: return # <--- ПРОВЕРКА
+
         if coin_type == "gold":
             sound = self._pick_sound(self.gold_landing_sounds, self._last_gold_land)
             self._last_gold_land = sound
@@ -180,6 +185,7 @@ class SoundManager:
         if sound:
             sound.play()
 
+
     def _pick_sound(self, pool: list, last_sound: any) -> any:
         if not pool:
             return None
@@ -189,3 +195,6 @@ class SoundManager:
         if not candidates:
             return random.choice(pool)
         return random.choice(candidates)
+
+    def toggle_mute(self):
+        self.muted = not self.muted
