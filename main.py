@@ -26,65 +26,216 @@ STATE_GAME = 1
 
 
 class MenuCoin(PygameSprite):
-    def __init__(self, x, y, tex_heads, tex_tails, scale):
-        super().__init__(image=tex_heads, scale=scale)
+    """
+    Монетка для главного меню. Наследуется от PygameSprite для качественного рендера.
+    """
+
+    def __init__(self, x, y, sprites_dict, scale=1.0):
+        # 1. Инициализация спрайта
+        start_face = random.choice(["heads", "tails"])
+        start_tex = sprites_dict.get(start_face)
+        if not start_tex:
+            start_tex = pygame.Surface((64, 64), pygame.SRCALPHA)
+            start_tex.fill((255, 0, 0))
+
+        super().__init__(image=start_tex, scale=scale)
+
         self.center_x = x
         self.center_y = y
-        self.radius = 32 * scale
-        speed = 225 * scale
+
+        self.sprites = sprites_dict
+        self.base_width = start_tex.get_width()
+
+        # Радиус коллизии (45% от ширины визуала)
+        self.radius = (self.base_width * scale) * 0.45
+
+        # Физика
+        speed = 150 * scale
         angle = random.uniform(0, 2 * math.pi)
         self.vx = math.cos(angle) * speed
         self.vy = math.sin(angle) * speed
 
-    def update(self, dt, width, height):
-        self.center_x += self.vx * dt
-        self.center_y += self.vy * dt
+        # Состояние
+        self.is_moving = False  # False = скольжение, True = полет
 
-        if self.left < 0:
-            self.left = 0
-            self.vx *= -1
-        elif self.right > width:
-            self.right = width
-            self.vx *= -1
-        if self.bottom < 0:
-            self.bottom = 0
-            self.vy *= -1
-        elif self.top > height:
-            self.top = height
-            self.vy *= -1
+        # Анимация
+        self.anim = []
+        self.anim_index = 0
+        self.anim_timer = 0.0
+        self.anim_speed = 0.05
+
+        # --- ЛОГИКА ТАЙМЕРА ---
+        self.timer = 0.0
+        self.next_action_time = random.uniform(0, 8.0)  # Время первого подброса
+        self.is_cooldown = False  # Флаг фазы (False = окно подброса, True = кд 4 сек)
+
+    def update(self, dt, width, height):
+        # --- 1. Логика Таймера и Подброса ---
+        if not self.is_moving:
+            self.timer += dt
+
+            if self.is_cooldown:
+                # Фаза ожидания после приземления (4 секунды)
+                if self.timer >= 4.0:
+                    self.is_cooldown = False
+                    self.timer = 0.0
+                    self.next_action_time = random.uniform(0, 8.0)
+            else:
+                # Фаза ожидания подброса (окно 8 секунд)
+                if self.timer >= self.next_action_time:
+                    self._do_toss()
+
+        # --- 2. Физика ---
+        if self.is_moving:
+            # === ПОЛЕТ ===
+            self.center_x += self.vx * dt
+            self.center_y += self.vy * dt
+
+            # Отскок от стен
+            if self.left < 0:
+                self.left = 0
+                self.vx = abs(self.vx)
+            elif self.right > width:
+                self.right = width
+                self.vx = -abs(self.vx)
+
+            if self.bottom < 0:
+                self.bottom = 0
+                self.vy = abs(self.vy)
+            elif self.top > height:
+                self.top = height
+                self.vy = -abs(self.vy)
+
+            # Анимация
+            self.anim_timer += dt
+            if self.anim_timer >= self.anim_speed:
+                self.anim_timer = 0
+                self.anim_index += 1
+
+                # ПРИЗЕМЛЕНИЕ: Сразу после последнего кадра
+                if self.anim_index >= len(self.anim):
+                    self.land()
+        else:
+            # === СКОЛЬЖЕНИЕ ===
+            self.center_x += self.vx * dt
+            self.center_y += self.vy * dt
+
+            # Отскок от стен
+            if self.left < 0:
+                self.left = 0
+                self.vx *= -1
+            elif self.right > width:
+                self.right = width
+                self.vx *= -1
+
+            if self.bottom < 0:
+                self.bottom = 0
+                self.vy *= -1
+            elif self.top > height:
+                self.top = height
+                self.vy *= -1
+
+    def _do_toss(self):
+        """Запуск подбрасывания"""
+        self.is_moving = True
+
+        force = random.uniform(600, 900)
+        angle = random.uniform(0, 2 * math.pi)
+        self.vx = math.cos(angle) * force
+        self.vy = math.sin(angle) * force
+
+        self._select_flying_animation()
+        self.anim_index = 0
+        self.anim_timer = 0
+
+    def land(self):
+        """Приземление"""
+        self.is_moving = False
+
+        # Смена текстуры на статичную (орел/решка)
+        if random.random() < 0.5:
+            self.texture = self.sprites.get("heads")
+        else:
+            self.texture = self.sprites.get("tails")
+
+        # Запуск кулдауна (4 секунды)
+        self.is_cooldown = True
+        self.timer = 0.0
+
+    def _select_flying_animation(self):
+        if abs(self.vx) > 1.5 * abs(self.vy):
+            self.anim = self.sprites.get("right", []) if self.vx > 0 else self.sprites.get("left", [])
+        elif abs(self.vy) > 1.5 * abs(self.vx):
+            self.anim = self.sprites.get("up", []) if self.vy > 0 else self.sprites.get("down", [])
+        else:
+            if self.vx > 0 and self.vy > 0:
+                self.anim = self.sprites.get("up_right", [])
+            elif self.vx > 0 and self.vy < 0:
+                self.anim = self.sprites.get("down_right", [])
+            elif self.vx < 0 and self.vy > 0:
+                self.anim = self.sprites.get("up_left", [])
+            else:
+                self.anim = self.sprites.get("down_left", [])
+
+        if not self.anim:
+            self.anim = [self.sprites.get("heads")]
+
+    def draw(self, surface, screen_height):
+        # --- ОБНОВЛЕНИЕ ТЕКСТУРЫ ДЛЯ АНИМАЦИИ ---
+        if self.is_moving:
+            if self.anim and self.anim_index < len(self.anim):
+                self.texture = self.anim[self.anim_index]
+
+            # Тень
+            shadow_radius = int(self.width * 0.55)
+            shadow_surf = pygame.Surface((shadow_radius * 2, shadow_radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(shadow_surf, (0, 0, 0, 50), (shadow_radius, shadow_radius), shadow_radius)
+
+            draw_y = int(screen_height - self.center_y)
+            surface.blit(shadow_surf, (int(self.center_x - shadow_radius), draw_y + 10 - shadow_radius))
+
+        # Отрисовка самой монетки
+        super().draw(surface, screen_height)
 
 
 def _handle_menu_collisions(coins):
+    """
+    Коллизия только для скользящих монет.
+    Летающие монеты (is_moving=True) игнорируют столкновения.
+    """
     n = len(coins)
     for i in range(n):
         for j in range(i + 1, n):
             c1 = coins[i]
             c2 = coins[j]
 
-            dx = c1.center_x - c2.center_x
-            dy = c1.center_y - c2.center_y
+            # ЕСЛИ ХОТЯ БЫ ОДНА ЛЕТИТ - КОЛЛИЗИИ НЕТ (ПРОЛЕТАЮТ СКВОЗЬ)
+            if c1.is_moving or c2.is_moving:
+                continue
+
+            # Стандартная физика для "наземных" монет
+            dx = c2.center_x - c1.center_x
+            dy = c2.center_y - c1.center_y
             dist_sq = dx * dx + dy * dy
             min_dist = c1.radius + c2.radius
 
-            if dist_sq < min_dist * min_dist:
+            if dist_sq < min_dist * min_dist and dist_sq > 0:
                 dist = math.sqrt(dist_sq)
-                if dist == 0: dist = 0.01
 
-                overlap = min_dist - dist
                 nx = dx / dist
                 ny = dy / dist
 
-                move = overlap / 2.0
-                c1.center_x += nx * move
-                c1.center_y += ny * move
-                c2.center_x -= nx * move
-                c2.center_y -= ny * move
+                overlap = min_dist - dist
+                c1.center_x -= nx * overlap * 0.5
+                c1.center_y -= ny * overlap * 0.5
+                c2.center_x += nx * overlap * 0.5
+                c2.center_y += ny * overlap * 0.5
 
                 dvx = c1.vx - c2.vx
                 dvy = c1.vy - c2.vy
                 dot = dvx * nx + dvy * ny
 
-                if dot < 0:
+                if dot > 0:
                     c1.vx -= dot * nx
                     c1.vy -= dot * ny
                     c2.vx += dot * nx
@@ -161,13 +312,12 @@ def main():
     def spawn_menu_coins():
         menu_coins.clear()
 
-        def add_batch(tex_dict, count, scale):
-            tex = tex_dict.get("heads")
-            if tex:
-                for _ in range(count):
-                    x = random.randint(50, int(VIRTUAL_WIDTH - 50))
-                    y = random.randint(50, int(VIRTUAL_HEIGHT - 50))
-                    menu_coins.append(MenuCoin(x, y, tex, tex, scale))
+        def add_batch(sprites_dict, count, scale):
+            if not sprites_dict: return
+            for _ in range(count):
+                x = random.randint(100, int(VIRTUAL_WIDTH - 100))
+                y = random.randint(100, int(VIRTUAL_HEIGHT - 100))
+                menu_coins.append(MenuCoin(x, y, sprites_dict, scale))
 
         add_batch(asset_manager.bronze_coin_sprites, 15, 0.8)
         add_batch(asset_manager.silver_coin_sprites, 8, 1.0)
@@ -189,7 +339,7 @@ def main():
     btn_sound_rect = pygame.Rect(VIRTUAL_WIDTH - (settings_btn_w * 2) - (settings_margin * 2), settings_margin,
                                  settings_btn_w, settings_btn_h)
 
-    # Кнопки настроек в ИГРЕ (увеличил ширину до 110, чтобы влез "SOUND: OFF")
+    # Кнопки настроек в ИГРЕ
     game_btn_w = 110
     game_btn_h = 50
     game_btn_margin = 20
@@ -235,14 +385,13 @@ def main():
                         elif btn_lang_rect.collidepoint(vmx, vmy):
                             localization.toggle_language()
                             ui.reload_texts()
-                            spawn_menu_coins()
+                            # УБРАНО: spawn_menu_coins() - монетки больше не сбрасываются
                         elif btn_sound_rect.collidepoint(vmx, vmy):
                             sound_manager.toggle_mute()
 
                 elif state == STATE_GAME:
                     logic_y = VIRTUAL_HEIGHT - vmy
                     if event.button == pygame.BUTTON_LEFT:
-                        # Проверка кнопок настроек в ИГРЕ
                         if game_mute_rect.collidepoint(vmx, vmy):
                             sound_manager.toggle_mute()
                         elif game_lang_rect.collidepoint(vmx, vmy):
@@ -263,7 +412,6 @@ def main():
                         game.on_mouse_release_rmb(vmx, logic_y)
                     elif event.button == pygame.BUTTON_LEFT:
                         if vmx > WORLD_WIDTH:
-                            # Не обрабатываем клик по настройкам здесь
                             if not (game_mute_rect.collidepoint(vmx, vmy) or game_lang_rect.collidepoint(vmx, vmy)):
                                 upgrade_id = ui.on_mouse_release(vmx, vmy)
                                 if upgrade_id:
@@ -303,7 +451,9 @@ def main():
         canvas.fill((255, 255, 255))
 
         if state == STATE_MENU:
-            for c in menu_coins:
+            sorted_coins = sorted(menu_coins, key=lambda c: c.is_moving)
+
+            for c in sorted_coins:
                 c.draw(canvas, VIRTUAL_HEIGHT)
 
             overlay = pygame.Surface((VIRTUAL_WIDTH, VIRTUAL_HEIGHT), pygame.SRCALPHA)
@@ -325,8 +475,6 @@ def main():
                     txt_rect = txt_surf.get_rect(center=rect.center)
                     canvas.blit(txt_surf, txt_rect)
 
-                # Кнопки настроек в МЕНЮ
-                # Используем localization.current_lang напрямую
                 lang_key = "lang_" + localization.current_lang
                 lang_text = localization.get_text(lang_key)
 
@@ -380,18 +528,11 @@ def main():
                 canvas.blit(x_surf, x_surf.get_rect(center=close_rect.center))
 
         elif state == STATE_GAME:
-            # 1. Рисуем игру
             game.draw(canvas, VIRTUAL_HEIGHT)
-
-            # 2. Рисуем панель интерфейса
             ui.draw(canvas, VIRTUAL_HEIGHT, game.balance.get())
 
-            # 3. Рисуем кнопки настроек ПОВЕРХ панели
-
-            # --- Кнопка Языка ---
-            # Динамически получаем текущий язык из модуля
             lang_key = "lang_" + localization.current_lang
-            lang_text = localization.get_text(lang_key)  # "RU" или "EN"
+            lang_text = localization.get_text(lang_key)
 
             lang_color = (80, 80, 80) if game_lang_rect.collidepoint(vmx, vmy) else (60, 60, 60)
             pygame.draw.rect(canvas, lang_color, game_lang_rect, border_radius=5)
@@ -399,7 +540,6 @@ def main():
             lang_surf = main_font.render(lang_text, True, (255, 255, 255))
             canvas.blit(lang_surf, lang_surf.get_rect(center=game_lang_rect.center))
 
-            # --- Кнопка Звука ---
             sound_state = "ON" if not sound_manager.muted else "OFF"
             sound_text = f"SOUND: {sound_state}"
 
