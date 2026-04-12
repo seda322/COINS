@@ -1,9 +1,9 @@
-# localization.py
 current_lang = "ru"
 
 TEXTS = {
     "ru": {
         "menu_title": "Incremental Coin Game",
+        "btn_prestige": "Престиж",
         "btn_play": "Играть",
         "btn_help": "Как играть?",
         "btn_close": "X",
@@ -49,6 +49,14 @@ TEXTS = {
         "btn_tornado_cd": "КД Торнадо",
         "btn_spawn_meteor": "Метеорит",
         "btn_meteor_cd": "КД метеорита",
+        # ИСПРАВЛЕНО: Ключи престижа
+        "prestige_level_text": "Уровень Престижа: {0} (x{1} Доход)",
+        "prestige_need": "Престиж (Нужно > 1B)",
+        "prestige_gain": "Престиж (+{0})",
+        # ИСПРАВЛЕНО: Ключи звука
+        "sound_on": "Звук: Вкл",
+        "sound_off": "Звук: Выкл",
+
         "btn_new_game": "Новая игра",
         "btn_victory": "Победа??",
         "status_max": "Макс.",
@@ -63,14 +71,13 @@ TEXTS = {
         "help_fusion": "СЛИЯНИЕ:",
         "help_fusion_text": "5 Бронзовых -> 1 Серебряная\n3 Серебряных -> 1 Золотая",
         "help_luck": "Удачи!",
-        "sound_on": "ВКЛ",
-        "sound_off": "ВЫКЛ",
         "lang_ru": "RU",
         "lang_en": "EN",
     },
     "en": {
         "menu_title": "Incremental Coin Game",
         "btn_play": "Play",
+        "btn_prestige": "Prestige",
         "btn_help": "How to play?",
         "btn_close": "X",
         "ui_upgrades": "Upgrades",
@@ -101,6 +108,11 @@ TEXTS = {
         "btn_combo_limit": "Combo Limit",
         "btn_autoflip": "Auto-Flip",
         "btn_fuse_silver": "Fuse to Silver",
+        "prestige_level_text": "Prestige Level: {0} (x{1} Income)",
+        "prestige_need": "Prestige (Need > 1B)",
+        "prestige_gain": "Prestige (+{0})",
+        "sound_on": "Sound: ON",
+        "sound_off": "Sound: OFF",
         "btn_fuse_gold": "Fuse to Gold",
         "btn_wisp": "Wisp",
         "btn_wisp_speed": "Wisp Speed",
@@ -129,15 +141,15 @@ TEXTS = {
         "help_fusion": "FUSION:",
         "help_fusion_text": "5 Bronze -> 1 Silver\n3 Silver -> 1 Gold",
         "help_luck": "Good Luck!",
-        "sound_on": "ON",
-        "sound_off": "OFF",
         "lang_ru": "RU",
         "lang_en": "EN",
     }
 }
 
+
 def get_text(key):
     return TEXTS[current_lang].get(key, key)
+
 
 def toggle_language():
     global current_lang

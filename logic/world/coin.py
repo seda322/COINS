@@ -105,13 +105,18 @@ class Coin:
             speed = math.hypot(self.vx, self.vy)
             if speed > 30.0:  # Порог взлета
                 self.is_moving = True
-                # ВАЖНО: Сразу выбираем анимацию, иначе список anim будет пустым и монетка упадет обратно
+                # ВАЖНО: Сразу выбираем анимацию
                 self._select_flying_animation()
 
         # === ПОЛЕТ ===
         if self.is_moving:
             self.sprite.center_x += self.vx * dt
             self.sprite.center_y += self.vy * dt
+
+            # ИСПРАВЛЕНИЕ: Воздушное трение (чтобы монетки падали, а не летели вечно)
+            if not self.tornado_hit:
+                self.vx *= 0.995
+                self.vy *= 0.995
 
             self._clamp_speed()
             self._handle_wall_bounce(width, height)
@@ -164,8 +169,11 @@ class Coin:
             self.check_land_event()
 
     def land(self) -> None:
-        # Если мы в торнадо, не приземляемся (торнадо держит)
+        # ИСПРАВЛЕНИЕ: Если мы в торнадо, не приземляемся, а продолжаем анимацию
         if self.tornado_hit:
+            self.anim_index = 0
+            if not self.anim:
+                self._select_flying_animation()
             return
 
         self.is_moving = False
@@ -173,18 +181,16 @@ class Coin:
         self.landed = True
         self.just_landed = True
         self.manual_override = False
-        self._last_flying_direction = None
 
         self.fixed_outcome_texture = None
 
-        # Определяем сторону и сохраняем в current_face
         is_heads = random.random() < 0.5
         if is_heads:
-            self.sprite.texture = self.sprites["heads"]
+            self.sprite.texture = self.sprites.get("heads")
             self.last_outcome_value = self.value
             self.current_face = "heads"
         else:
-            self.sprite.texture = self.sprites["tails"]
+            self.sprite.texture = self.sprites.get("tails")
             self.last_outcome_value = 0
             self.current_face = "tails"
 
@@ -278,7 +284,6 @@ class Coin:
 
     def _update_flying_direction_dynamic(self):
         """Динамическая смена анимации во время полета (для торнадо)"""
-        # Используем ту же логику, что и при клике
         new_anim = None
 
         if abs(self.vx) > 1.5 * abs(self.vy):
@@ -295,12 +300,8 @@ class Coin:
             else:
                 new_anim = self.sprites.get("down_left", [])
 
-        # Меняем анимацию только если список изменился или направление изменилось
-        # Сравниваем первый кадр, чтобы не пересоздавать список каждый кадр (оптимизация)
         if new_anim and (not self.anim or new_anim[0] != self.anim[0]):
             self.anim = new_anim
-            # При смене направления сбрасываем индекс, чтобы не было рывков
-            # или можно оставить anim_index как есть для плавности, но сброс надежнее
             self.anim_index = 0
 
     def _handle_collisions(self, nearby_coins):
@@ -335,16 +336,12 @@ class Coin:
                 other.vx -= nx * push
                 other.vy -= ny * push
 
-                # 3. ФИЗИКА ВРАЩЕНИЯ (Улучшенная)
+                # 3. ФИЗИКА ВРАЩЕНИЯ
                 dvx = self.vx - other.vx
                 dvy = self.vy - other.vy
-
                 tx = -ny
                 ty = nx
-
                 vel_along_tangent = dvx * tx + dvy * ty
-
-                # УМЕНЬШИЛ ИМПУЛЬС (было 0.02) -> меньше закручивается при ударе
                 spin_impulse = vel_along_tangent * 0.01
 
                 self.angular_velocity += spin_impulse
@@ -352,13 +349,10 @@ class Coin:
 
                 impact_speed = math.sqrt(dvx ** 2 + dvy ** 2)
 
-                # АГРЕССИВНОЕ ГАШЕНИЕ В "ТОЛПЕ"
-                # Если монетки просто толкаются (медленно), сильно тормозим вращение
                 if impact_speed < 40.0:
                     self.angular_velocity *= 0.5
                     other.angular_velocity *= 0.5
 
-                # Ограничение
                 self.angular_velocity = max(-self.MAX_ANGULAR_VELOCITY,
                                             min(self.MAX_ANGULAR_VELOCITY, self.angular_velocity))
                 other.angular_velocity = max(-self.MAX_ANGULAR_VELOCITY,

@@ -347,18 +347,28 @@ def main():
     game_lang_rect = pygame.Rect(VIRTUAL_WIDTH - (game_btn_w * 2) - (game_btn_margin * 2), game_btn_margin, game_btn_w,
                                  game_btn_h)
 
+    # --- АДМИН-ПАНЕЛЬ (Кнопки) ---
+    admin_btn_w = 200
+    admin_btn_h = 40
+    admin_x = 10
+    admin_y = 10
+
+    admin_btn_lucky = pygame.Rect(admin_x, admin_y, admin_btn_w, admin_btn_h)
+    admin_btn_cursed = pygame.Rect(admin_x, admin_y + 50, admin_btn_w, admin_btn_h)
+    admin_btn_money = pygame.Rect(admin_x, admin_y + 100, admin_btn_w, admin_btn_h)
+    admin_btn_beetle = pygame.Rect(admin_x, admin_y + 150, admin_btn_w, admin_btn_h)  # Новая кнопка
+
     show_help = False
     help_scroll_y = 0
     help_w, help_h = 600, 400
 
-    # --- ГЛАВНЫЙ ЦИКЛ ---
     while running:
         dt = clock.tick(FPS) / 1000.0
         if dt > 0.1: dt = 0.1
 
         mx, my = pygame.mouse.get_pos()
-        vmx = mx * (VIRTUAL_WIDTH / screen.get_width())
-        vmy = my * (VIRTUAL_HEIGHT / screen.get_height())
+        vmx = int(mx * (VIRTUAL_WIDTH / screen.get_width()))
+        vmy = int(my * (VIRTUAL_HEIGHT / screen.get_height()))
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -385,12 +395,35 @@ def main():
                         elif btn_lang_rect.collidepoint(vmx, vmy):
                             localization.toggle_language()
                             ui.reload_texts()
-                            # УБРАНО: spawn_menu_coins() - монетки больше не сбрасываются
                         elif btn_sound_rect.collidepoint(vmx, vmy):
                             sound_manager.toggle_mute()
 
                 elif state == STATE_GAME:
                     logic_y = VIRTUAL_HEIGHT - vmy
+
+                    # --- АДМИН-ПАНЕЛЬ ОБРАБОТКА ---
+                    if event.button == pygame.BUTTON_LEFT:
+                        # Координаты админки должны совпадать с отрисовкой
+                        admin_y_start = VIRTUAL_HEIGHT - 60 - 220 - 20
+                        admin_btn_lucky = pygame.Rect(10, admin_y_start + 10, 200, 40)
+                        admin_btn_cursed = pygame.Rect(10, admin_y_start + 60, 200, 40)
+                        admin_btn_money = pygame.Rect(10, admin_y_start + 110, 200, 40)
+                        admin_btn_beetle = pygame.Rect(10, admin_y_start + 160, 200, 40)
+
+                        if admin_btn_lucky.collidepoint(vmx, vmy):
+                            game.spawn_coin("lucky", vmx, logic_y)
+                            continue
+                        elif admin_btn_cursed.collidepoint(vmx, vmy):
+                            game.spawn_coin("cursed", vmx, logic_y)
+                            continue
+                        elif admin_btn_money.collidepoint(vmx, vmy):
+                            game.balance.add(1_000_000_000_000_000_000_000_000)
+                            continue
+                        elif admin_btn_beetle.collidepoint(vmx, vmy):
+                            game.spawn_beetle()
+                            continue
+
+                    # --- ИГРОВАЯ ЛОГИКА ---
                     if event.button == pygame.BUTTON_LEFT:
                         if game_mute_rect.collidepoint(vmx, vmy):
                             sound_manager.toggle_mute()
@@ -424,8 +457,9 @@ def main():
             elif event.type == pygame.MOUSEMOTION:
                 if state == STATE_GAME:
                     logic_y = VIRTUAL_HEIGHT - vmy
-                    game.on_mouse_motion(vmx, logic_y, event.rel[0] * (VIRTUAL_WIDTH / screen.get_width()),
-                                         -event.rel[1] * (VIRTUAL_HEIGHT / screen.get_height()))
+                    dx = int(event.rel[0] * (VIRTUAL_WIDTH / screen.get_width()))
+                    dy = int(-event.rel[1] * (VIRTUAL_HEIGHT / screen.get_height()))
+                    game.on_mouse_motion(vmx, logic_y, dx, dy)
 
             elif event.type == pygame.MOUSEWHEEL:
                 if state == STATE_MENU and show_help:
@@ -528,9 +562,11 @@ def main():
                 canvas.blit(x_surf, x_surf.get_rect(center=close_rect.center))
 
         elif state == STATE_GAME:
+            # 1. Рисуем игру
             game.draw(canvas, VIRTUAL_HEIGHT)
             ui.draw(canvas, VIRTUAL_HEIGHT, game.balance.get())
 
+            # 2. Кнопки настроек (Язык/Звук)
             lang_key = "lang_" + localization.current_lang
             lang_text = localization.get_text(lang_key)
 
@@ -540,14 +576,63 @@ def main():
             lang_surf = main_font.render(lang_text, True, (255, 255, 255))
             canvas.blit(lang_surf, lang_surf.get_rect(center=game_lang_rect.center))
 
-            sound_state = "ON" if not sound_manager.muted else "OFF"
-            sound_text = f"SOUND: {sound_state}"
+            # Перевод звука
+            sound_state_key = "sound_on" if not sound_manager.muted else "sound_off"
+            sound_text = localization.get_text(sound_state_key)
 
             sound_color = (80, 80, 80) if game_mute_rect.collidepoint(vmx, vmy) else (60, 60, 60)
             pygame.draw.rect(canvas, sound_color, game_mute_rect, border_radius=5)
             pygame.draw.rect(canvas, (150, 150, 150), game_mute_rect, 2, border_radius=5)
             sound_surf = main_font.render(sound_text, True, (255, 255, 255))
             canvas.blit(sound_surf, sound_surf.get_rect(center=game_mute_rect.center))
+
+            # 3. Престиж (Слева сверху, ЧЕРНЫМ цветом)
+            pres_template = localization.get_text("prestige_level_text")
+            prestige_text = pres_template.format(game.prestige.points, round(game.prestige.multiplier, 1))
+            pres_surf = main_font.render(prestige_text, True, (0, 0, 0))  # Черный цвет
+            canvas.blit(pres_surf, (10, 10))
+
+            # 4. Админ-панель (Сдвинута вниз, над комбо)
+            # Комбо рисуется на высоте ~60 пикселей снизу. Админка будет над ним.
+            admin_panel_height = 220
+            admin_y_start = VIRTUAL_HEIGHT - 60 - admin_panel_height - 20  # Немного места над комбо
+
+            admin_btn_h = 40
+            admin_btn_w = 200
+            admin_x = 10
+
+            admin_btn_lucky = pygame.Rect(admin_x, admin_y_start + 10, admin_btn_w, admin_btn_h)
+            admin_btn_cursed = pygame.Rect(admin_x, admin_y_start + 60, admin_btn_w, admin_btn_h)
+            admin_btn_money = pygame.Rect(admin_x, admin_y_start + 110, admin_btn_w, admin_btn_h)
+            admin_btn_beetle = pygame.Rect(admin_x, admin_y_start + 160, admin_btn_w, admin_btn_h)
+
+            # Фон панели
+            pygame.draw.rect(canvas, (50, 50, 50, 180),
+                             (admin_x - 5, admin_y_start + 5, admin_btn_w + 10, admin_panel_height), border_radius=5)
+
+            # Кнопка Lucky
+            lucky_color = (50, 150, 50) if not admin_btn_lucky.collidepoint(vmx, vmy) else (70, 200, 70)
+            pygame.draw.rect(canvas, lucky_color, admin_btn_lucky, border_radius=3)
+            lucky_txt = main_font.render("SPAWN LUCKY", True, (255, 255, 255))
+            canvas.blit(lucky_txt, (admin_btn_lucky.x + 10, admin_btn_lucky.y + 10))
+
+            # Кнопка Cursed
+            cursed_color = (100, 50, 100) if not admin_btn_cursed.collidepoint(vmx, vmy) else (150, 70, 150)
+            pygame.draw.rect(canvas, cursed_color, admin_btn_cursed, border_radius=3)
+            cursed_txt = main_font.render("SPAWN CURSED", True, (255, 255, 255))
+            canvas.blit(cursed_txt, (admin_btn_cursed.x + 10, admin_btn_cursed.y + 10))
+
+            # Кнопка Money
+            money_color = (150, 150, 50) if not admin_btn_money.collidepoint(vmx, vmy) else (200, 200, 70)
+            pygame.draw.rect(canvas, money_color, admin_btn_money, border_radius=3)
+            money_txt = main_font.render("+1 SEPTILLION $", True, (0, 0, 0))
+            canvas.blit(money_txt, (admin_btn_money.x + 10, admin_btn_money.y + 10))
+
+            # Кнопка Beetle
+            beetle_color = (150, 100, 50) if not admin_btn_beetle.collidepoint(vmx, vmy) else (200, 140, 70)
+            pygame.draw.rect(canvas, beetle_color, admin_btn_beetle, border_radius=3)
+            beetle_txt = main_font.render("SPAWN BEETLE", True, (255, 255, 255))
+            canvas.blit(beetle_txt, (admin_btn_beetle.x + 10, admin_btn_beetle.y + 10))
 
         pygame.transform.smoothscale(canvas, (screen.get_width(), screen.get_height()), screen)
         pygame.display.flip()

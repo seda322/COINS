@@ -9,7 +9,7 @@ class SilverCoin(Coin):
             y: float,
             sprites: dict,
             crit_chance: float = 0.0,
-            value: int = 10,  # <--- ДОБАВЛЯЕМ АРГУМЕНТ value
+            value: int = 10,
             scale: float = 1.1,
             scale_factor: float = 1.0
     ) -> None:
@@ -17,7 +17,7 @@ class SilverCoin(Coin):
             x=x,
             y=y,
             sprites=sprites,
-            value=value,  # <--- ПЕРЕДАЕМ value ВМЕСТО 10
+            value=value,
             scale=scale,
             scale_factor=scale_factor
         )
@@ -25,6 +25,14 @@ class SilverCoin(Coin):
         self.is_crit = False
 
     def land(self) -> None:
+        # ИСПРАВЛЕНИЕ: Сначала проверяем торнадо, как в базовом классе
+        if self.tornado_hit:
+            self.anim_index = 0
+            if not self.anim:
+                self._select_flying_animation()
+            return
+
+        # Обычная логика приземления серебра
         is_heads = random.random() < 0.5
         val = 0
 

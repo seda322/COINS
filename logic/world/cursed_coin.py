@@ -1,47 +1,54 @@
 from logic.world.coin import Coin
 import random
-import arcade
 
 
 class CursedCoin(Coin):
-    def __init__(self, x: float, y: float, sprites: dict, scale: float = 1.5, scale_factor: float = 1.0) -> None:
-        super().__init__(x, y, sprites, value=0, scale=scale, scale_factor=scale_factor)
-
+    def __init__(
+            self,
+            x: float,
+            y: float,
+            sprites: dict,
+            value: int = 10,
+            scale: float = 1.3,
+            scale_factor: float = 1.0
+    ) -> None:
+        super().__init__(
+            x=x,
+            y=y,
+            sprites=sprites,
+            value=value,
+            scale=scale,
+            scale_factor=scale_factor
+        )
         self.bankruptcy_triggered = False
         self.sound_played = False
         self.is_used = False
-        self.lifetime = None
-        self.particle_timer = 0.0
-    def hit(self, dx: int, dy: int) -> None:
-        if self.is_used:
-            return
-        super().hit(dx, dy)
 
     def land(self) -> None:
-        if self.is_used:
-            return
+        self.bankruptcy_triggered = False
+        self.sound_played = False
+        super().land()
 
         is_heads = random.random() < 0.5
 
         if is_heads:
-            # === УСПЕХ (Орел) ===
-            # 2 означает "Успех: x100"
-            self.last_outcome_value = 2
-            self.sprite.texture = self.sprites.get("heads")
-
-            self.lifetime = 2.0
-            self.bankruptcy_triggered = False
-
+            self.last_outcome_value = self.value
+            self.sprite.texture = self.sprites["heads"]
         else:
-            # === ПРОВАЛ (Решка) ===
             self.last_outcome_value = 0
-            self.sprite.texture = self.sprites.get("tails")
-
-            # Взрывается и забирает баланс
             self.bankruptcy_triggered = True
-            self.lifetime = 0.5
+            self.sprite.texture = self.sprites["tails"]
 
-        self.is_moving = False
-        self.anim = []
-        self.landed = True
+        # Запуск исчезновения
         self.is_used = True
+        self.lifetime = 2.5  # Исчезнет через 2.5 секунды
+        self.is_fading = True  # Флаг для прозрачности
+
+    # ЗАЩИТА ОТ ПЕРЕВОРОТА СУЩНОСТЯМИ
+    def hit(self, dx: int, dy: int) -> None:
+        if self.is_used: return
+        super().hit(dx, dy)
+
+    def hit_by_coin(self, source_coin, nx, ny) -> None:
+        if self.is_used: return
+        super().hit_by_coin(source_coin, nx, ny)

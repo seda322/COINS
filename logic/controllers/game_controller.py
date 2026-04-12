@@ -5,6 +5,7 @@ import json
 import os
 import time
 import sys
+from logic.economy.prestige import PrestigeManager
 from logic.world.gold_coin import GoldCoin
 from logic.world.bronze_coin import BronzeCoin
 from logic.world.silver_coin import SilverCoin
@@ -32,18 +33,66 @@ class GameController:
         self.sound_manager = sound_manager
         self.coins = []
         self.particles = []
-
-        # floating_texts теперь хранит только данные, рисовать будем в draw()
         self.floating_texts = []
 
-        # === КОНСТАНТЫ БАЗОВОЙ СТОИМОСТИ ===
-        self.base_coin_values = {
-            "bronze": 131213212311321331,  # Вернул 1, иначе там огромное число было
-            "silver": 10,
-            "gold": 100
-        }
-        # ====================================
+        # === ПРЕСТИЖ ===
+        self.prestige = PrestigeManager()
+        self.confirmation_dialog = None
 
+        # === КОНСТАНТЫ БАЗОВОЙ СТОИМОСТИ ===
+        self.base_prices = {
+            "buy_bronze_coin": 10,
+            "bronze_value_upgrade": 50,
+            "silver_crit_upgrade": 500,
+            "silver_crit_chance_upgrade": 1000,
+            "silver_value_upgrade": 5000,
+            "gold_value_upgrade": 50000,
+            "grab_upgrade": 100000,
+            "gold_explosion_upgrade": 250000,
+            "wisp_spawn": 1000000,
+            "wisp_speed": 500000,
+            "wisp_size": 500000,
+            "unlock_combo": 50000000,
+            "upgrade_combo_limit": 100000000,
+            "auto_flip_upgrade": 10000,
+            "spawn_zone_2": 50000000,
+            "upgrade_zone_2_size": 20000000,
+            "upgrade_zone_2_mult": 40000000,
+            "spawn_zone_5": 500000000000,
+            "upgrade_zone_5_size": 100000000000,
+            "upgrade_zone_5_mult": 200000000000,
+            "spawn_tornado": 2000000000000,
+            "tornado_cooldown_upgrade": 5000000000000,
+            "spawn_meteor": 1000000000000000,
+            "meteor_cooldown_upgrade": 2000000000000000,
+            "buy_victory": 10_000_000_000_000_000_000_000_000,
+            "fuse_to_silver": 0,
+            "fuse_to_gold": 0,
+        }
+
+        # === МНОЖИТЕЛИ РОСТА ЦЕН ===
+        self.price_mult = {
+            "buy_bronze_coin": 1.10,
+            "bronze_value_upgrade": 1.15,
+            "silver_value_upgrade": 1.20,
+            "gold_value_upgrade": 1.25,
+            "silver_crit_upgrade": 1.30,
+            "silver_crit_chance_upgrade": 1.40,
+            "auto_flip_upgrade": 1.50,
+            "wisp_speed": 1.30,
+            "wisp_size": 1.30,
+            "upgrade_combo_limit": 1.50,
+            "upgrade_zone_2_size": 1.40,
+            "upgrade_zone_2_mult": 1.50,
+            "upgrade_zone_5_size": 1.40,
+            "upgrade_zone_5_mult": 1.50,
+            "tornado_cooldown_upgrade": 1.50,
+            "meteor_cooldown_upgrade": 1.50,
+        }
+
+        self.base_coin_values = {"bronze": 1, "silver": 10, "gold": 100}
+
+        # === ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ ===
         self.shake_timer = 0.0
         self.shake_intensity = 0.0
         self.game_over_active = False
@@ -56,42 +105,32 @@ class GameController:
         self.combo_particle_timer = 0.0
         self.combo_visuals = []
         self.combo_stagnation_angle = 0.0
+
         self.tornado = None
         self.tornado_respawn_timer = 0.0
         self.tornado_next_spawn_time = 0.0
         self.tornado_unlocked = False
         self.tornado_cooldown_level = 0
         self.tornado_base_cooldown = 60.0
-
-        # Заменили SpriteList на список
         self.tornado_list = []
-        self.max_coins = 200
 
-        # === ОГРАНИЧЕНИЯ СЛИЯНИЙ ===
+        self.max_coins = 200
         self.silver_fusions_count = 0
         self.gold_fusions_count = 0
         self.max_silver_fusions = 75
         self.max_gold_fusions = 25
-        # ===========================
 
+        # ИСПРАВЛЕНО: Комбо изначально 0 уровня и заблокировано
         self.combo_unlocked = False
         self.combo_value = 1.0
-        self.combo_limit_level = 1
+        self.combo_limit_level = 0
         self.combo_base_limit = 2.0
         self.combo_limit = self.combo_base_limit
-        self.combo_watch_timer = 0.0
-        self.combo_hit_this_second = False
-        self.combo_visuals = []
-        self.combo_stagnation_angle = 0.0
 
         self.meteor = None
         self.crater = None
-
-        # Заменили SpriteList на список
         self.explosions = []
-
         self.meteor_respawn_timer = 0.0
-        self.meteor_next_spawn_time = 0.0
         self.meteor_next_spawn_time = random.uniform(10.0, 60.0)
         self.meteor_blast_radius = 400.0
         self.meteor_volume = 0.4
@@ -106,12 +145,10 @@ class GameController:
         self.bronze_coin_level = 1
         self.silver_coin_level = 0
         self.gold_coin_level = 0
-
         self.silver_crit_level = 1
         self.silver_crit_chance_level = 1
         self.auto_flip_level = 0
         self.auto_flip_timer = 0.0
-
         self.bronze_value_level = 0
         self.silver_value_level = 0
         self.gold_value_level = 0
@@ -122,49 +159,21 @@ class GameController:
         self.zone_5_size_level = 0
         self.zone_5_mult_level = 0
 
-        # === НОВЫЙ БАЛАНС ЦЕН ===
-        self.upgrade_prices = {
-            "buy_bronze_coin": 10,
-            "silver_crit_upgrade": 20000,
-            "silver_crit_chance_upgrade": 50000,
-            "grab_upgrade": 25000,
-            "gold_explosion_upgrade": 15000,
-            "wisp_spawn": 100000,
-            "unlock_combo": 50000000,
-            "upgrade_combo_limit": 100000000,
-            "wisp_speed": 100000,
-            "wisp_size": 100000,
-            "spawn_zone_2": 80000000,
-            "spawn_zone_5": 500000000000,
-            "upgrade_zone_2_size": 20000000,
-            "upgrade_zone_5_size": 100000000000,
-            "upgrade_zone_2_mult": 40000000,
-            "upgrade_zone_5_mult": 200000000000,
-            "spawn_tornado": 2000000000000,
-            "tornado_cooldown_upgrade": 5000000000000,
-            "auto_flip_upgrade": 1000,
-            "bronze_value_upgrade": 50,
-            "silver_value_upgrade": 1000,
-            "gold_value_upgrade": 200000,
-            "spawn_meteor": 1000000000000000,
-            "buy_victory": 10_000_000_000_000_000_000_000_000,
-            "meteor_cooldown_upgrade": 2000000000000000,
-            "fuse_to_silver": 0,
-            "fuse_to_gold": 0,
-        }
-        # ================================
-
         self.has_gold_coin = False
         self.grab_purchased = False
         self.gold_explosion_unlocked = False
         self.grabbed_coin = None
 
-        self.wisp: Wisp | None = None
-        self.wisp_list = []  # Заменили SpriteList
+        self.wisp = None
+        self.wisp_list = []
+        self.zones = []
+        self.zone_2 = None
+        self.zone_5 = None
 
-        self.zones: list[MultiplyZone] = []
-        self.zone_2: MultiplyZone | None = None
-        self.zone_5: MultiplyZone | None = None
+        self.beetle = None
+        self.beetle_stash = 0
+        self.beetle_respawn_timer = 0.0
+        self.beetle_respawn_interval = random.uniform(240.0, 300.0) # Первый спаун 4-5 минут
 
         self.mouse_x = 0
         self.mouse_y = 0
@@ -179,20 +188,9 @@ class GameController:
         self.start_coin_x = world_width * 0.25
         self.start_coin_y = world_height * 0.5
 
-        self.beetle = None
-        self.beetle_stash = 0
-        self.beetle_respawn_timer = 0.0
-        self.beetle_respawn_interval = 0.0
-        self.spawn_beetle_initial()
-
-        if not self.load_game():
-            self.spawn_coin("bronze")
-            self._sync_ui_prices()
-
-        # Инициализация Spatial Hash
         self.spatial_hash = SpatialHash(cell_size=int(150 * self.scale_factor))
 
-        # Загрузка шрифта для Pygame
+        # Загрузка шрифта
         raw_font_path = self.assets.ui_assets.get("font_name", "Arial")
         try:
             if raw_font_path != "Arial" and os.path.exists(raw_font_path):
@@ -201,6 +199,14 @@ class GameController:
                 self.game_font = pygame.font.SysFont("Arial", 20)
         except:
             self.game_font = pygame.font.SysFont("Arial", 20)
+
+        self.upgrade_prices = {}
+
+        if not self.load_game():
+            self.spawn_coin("bronze")
+            self._sync_ui_prices()
+
+        self.spawn_beetle_initial()
 
     def _sync_ui_prices(self):
         for key, price in self.upgrade_prices.items():
@@ -225,6 +231,9 @@ class GameController:
                 level = self.combo_limit_level
             elif key == "auto_flip_upgrade":
                 level = self.auto_flip_level
+
+            # Обновляем кнопку престижа при синхронизации
+            self._update_prestige_ui()
 
             self.ui.update_button(key, price, level)
 
@@ -283,6 +292,183 @@ class GameController:
             return "silver"
         else:
             return "bronze"
+
+    def try_buy_upgrade(self, upgrade_id: str) -> bool:
+        if upgrade_id == "new_game":
+            self.reset_game(hard_reset=False)
+            return True
+
+        if upgrade_id == "prestige":
+            if self.prestige.can_prestige():
+                self.perform_prestige()
+                return True
+            return False
+
+        level = self._get_current_level(upgrade_id)
+        cost = self._calculate_price(upgrade_id, level)
+
+        if upgrade_id in ["grab_upgrade", "gold_explosion_upgrade", "wisp_spawn", "unlock_combo",
+                          "spawn_zone_2", "spawn_zone_5", "spawn_tornado", "spawn_meteor", "buy_victory",
+                          "fuse_to_silver", "fuse_to_gold"]:
+            cost = self.base_prices.get(upgrade_id, 1000)
+
+        if self.balance.can_spend(cost):
+            self.balance.spend(cost)
+            success = True
+
+            if upgrade_id == "buy_bronze_coin":
+                coin = self.spawn_coin("bronze")
+                if coin:
+                    self.bronze_coin_level += 1
+                else:
+                    success = False
+
+            elif upgrade_id == "bronze_value_upgrade":
+                self.bronze_value_level += 1
+                for c in self.coins:
+                    if isinstance(c, BronzeCoin): c.value = int(
+                        self.base_coin_values["bronze"] * (1.5 ** self.bronze_value_level))
+
+            elif upgrade_id == "silver_value_upgrade":
+                self.silver_value_level += 1
+                for c in self.coins:
+                    if isinstance(c, SilverCoin): c.value = int(
+                        self.base_coin_values["silver"] * (1.5 ** self.silver_value_level))
+
+            elif upgrade_id == "gold_value_upgrade":
+                self.gold_value_level += 1
+                for c in self.coins:
+                    if isinstance(c, GoldCoin): c.value = int(
+                        self.base_coin_values["gold"] * (1.5 ** self.gold_value_level))
+
+            elif upgrade_id == "silver_crit_upgrade":
+                self.silver_crit_level += 1
+            elif upgrade_id == "silver_crit_chance_upgrade":
+                self.silver_crit_chance_level += 1
+            elif upgrade_id == "auto_flip_upgrade":
+                self.auto_flip_level += 1
+
+            elif upgrade_id == "wisp_speed":
+                if self.wisp: self.wisp.upgrade_speed(50)
+                self.wisp_speed_level += 1
+            elif upgrade_id == "wisp_size":
+                if self.wisp: self.wisp.upgrade_scale(0.025)
+                self.wisp_size_level += 1
+
+            elif upgrade_id == "upgrade_combo_limit":
+                if not self.combo_unlocked:
+                    return False
+                self.combo_limit_level += 1
+                new_limit = self.combo_base_limit + (self.combo_limit_level * 0.5)
+                if new_limit > 10.0: new_limit = 10.0
+                self.combo_limit = new_limit
+
+            elif upgrade_id == "upgrade_zone_2_size":
+                if self.zone_2: self.zone_2.upgrade_size(1.03)
+                self.zone_2_size_level += 1
+            elif upgrade_id == "upgrade_zone_2_mult":
+                if self.zone_2: self.zone_2.upgrade_multiplier(0.2)
+                self.zone_2_mult_level += 1
+            elif upgrade_id == "upgrade_zone_5_size":
+                if self.zone_5: self.zone_5.upgrade_size(1.03)
+                self.zone_5_size_level += 1
+            elif upgrade_id == "upgrade_zone_5_mult":
+                if self.zone_5: self.zone_5.upgrade_multiplier(0.4)
+                self.zone_5_mult_level += 1
+
+            elif upgrade_id == "tornado_cooldown_upgrade":
+                self.tornado_cooldown_level += 1
+            elif upgrade_id == "meteor_cooldown_upgrade":
+                self.meteor_cooldown_level += 1
+
+            elif upgrade_id == "grab_upgrade":
+                self.grab_purchased = True
+                self.ui.mark_purchased(upgrade_id)
+            elif upgrade_id == "gold_explosion_upgrade":
+                self.gold_explosion_unlocked = True
+                self.ui.mark_purchased(upgrade_id)
+            elif upgrade_id == "wisp_spawn":
+                if not self.wisp:
+                    self.wisp = Wisp(self.width / 2, self.height / 2, self.assets.wisp_sprites,
+                                     speed=100 * self.scale_factor, scale=0.33, scale_factor=self.scale_factor)
+                    self.wisp_list.append(self.wisp)
+                    self.ui.mark_purchased(upgrade_id)
+
+            elif upgrade_id == "unlock_combo":
+                if not self.combo_unlocked:
+                    self.combo_unlocked = True
+                    self.combo_limit_level = 1  # Сразу 1 уровень
+                    self.combo_limit = self.combo_base_limit + 0.5
+                    self.ui.mark_purchased(upgrade_id)
+
+            elif upgrade_id == "spawn_zone_2":
+                if self.zone_2 is None:
+                    z2 = MultiplyZone(self.width, self.height, 2.0, (100, 255, 100, 100))
+                    self.zones.append(z2)
+                    self.zone_2 = z2
+                    self.ui.mark_purchased(upgrade_id)
+            elif upgrade_id == "spawn_zone_5":
+                if self.zone_5 is None:
+                    z5 = MultiplyZone(self.width, self.height, 5.0, (160, 32, 240, 100))
+                    self.zones.append(z5)
+                    self.zone_5 = z5
+                    self.ui.mark_purchased(upgrade_id)
+
+            elif upgrade_id == "spawn_tornado":
+                if not self.tornado_unlocked:
+                    self.tornado_unlocked = True
+                    self.ui.mark_purchased(upgrade_id)
+            elif upgrade_id == "spawn_meteor":
+                if not self.meteor_unlocked:
+                    self.meteor_unlocked = True
+                    self.ui.mark_purchased(upgrade_id)
+
+            elif upgrade_id == "buy_victory":
+                if not self.game_over_active:
+                    try:
+                        os.remove(self.get_save_path())
+                    except:
+                        pass
+                    self.game_over_active = True
+                    self.game_over_timer = 0.0
+                    self.game_over_stage = 0
+                    self.ui.mark_purchased(upgrade_id)
+
+            elif upgrade_id == "fuse_to_silver":
+                bronze_coins = [c for c in self.coins if isinstance(c, BronzeCoin)]
+                if len(bronze_coins) >= 5 and self.silver_fusions_count < self.max_silver_fusions:
+                    target_x = bronze_coins[0].sprite.center_x
+                    target_y = bronze_coins[0].sprite.center_y
+                    for i in range(5): self.coins.remove(bronze_coins[i])
+                    self.spawn_coin("silver", x=target_x, y=target_y)
+                    if self.sound_manager.merge_sound: self.sound_manager.merge_sound.play()
+                    self.silver_fusions_count += 1
+                    self._update_fusion_buttons()
+                else:
+                    success = False
+
+            elif upgrade_id == "fuse_to_gold":
+                silver_coins = [c for c in self.coins if isinstance(c, SilverCoin)]
+                if len(silver_coins) >= 3 and self.gold_fusions_count < self.max_gold_fusions:
+                    target_x = silver_coins[0].sprite.center_x
+                    target_y = silver_coins[0].sprite.center_y
+                    for i in range(3): self.coins.remove(silver_coins[i])
+                    self.spawn_coin("gold", x=target_x, y=target_y)
+                    if self.sound_manager.merge_sound: self.sound_manager.merge_sound.play()
+                    self.gold_fusions_count += 1
+                    self._update_fusion_buttons()
+                else:
+                    success = False
+
+            if success:
+                next_price = self._calculate_price(upgrade_id, self._get_current_level(upgrade_id))
+                self.ui.update_button(upgrade_id, next_price, level=self._get_current_level(upgrade_id))
+                self._update_prestige_ui()
+                return True
+            else:
+                self.balance.add(cost)
+                return False
+        return False
 
     def update(self, dt: float) -> None:
         width = self.width
@@ -367,11 +553,12 @@ class GameController:
                         self.spawn_tornado()
                         self.tornado_respawn_timer = 0.0
 
+            # === ЖУК ===
             if self.beetle:
                 is_alive = self.beetle.update(dt, width, height)
                 if is_alive is False:
                     self.beetle = None
-                    self.beetle_respawn_interval = random.uniform(180.0, 300.0)
+                    self.beetle_respawn_interval = random.uniform(240.0, 300.0)
                     self.beetle_respawn_timer = 0.0
             else:
                 self.beetle_respawn_timer += dt
@@ -397,7 +584,6 @@ class GameController:
                         impact_x = self.meteor.center_x
                         impact_y = self.meteor.center_y
 
-                        # ИСПРАВЛЕНИЕ: Звук только если не выключен
                         if self.sound_manager.boom_sound and not self.sound_manager.muted:
                             self.sound_manager.boom_sound.set_volume(self.meteor_volume)
                             self.sound_manager.boom_sound.play()
@@ -411,7 +597,6 @@ class GameController:
                             self.crater.multiplier = 10.0
                             self.crater.scale = 1.5
                         else:
-                            print("WARNING: Crater texture missing!")
                             self.crater = None
                         for coin in self.coins:
                             dx = impact_x - coin.sprite.center_x
@@ -467,6 +652,8 @@ class GameController:
                 coin.update(dt, width, height, nearby_coins)
 
                 outcome = coin.check_land_event()
+
+                # === ЛОГИКА УСПЕХА (Outcome > 0) ===
                 if outcome > 0:
                     total_multiplier = 1.0
                     current_combo = self.combo_value if self.combo_unlocked else 1.0
@@ -491,64 +678,68 @@ class GameController:
                                                   coin)
 
                     if isinstance(coin, LuckyCoin):
-                        if coin.landed and outcome > 0 and not coin.sound_played:
+                        if not coin.sound_played:
                             current_balance = self.balance.get()
                             profit = int(current_balance * 4)
                             self._add_income(profit)
-                            updated_balance = self.balance.get()
-                            self.balance.set(updated_balance)
                             lx = coin.sprite.right + 10
                             ly = coin.sprite.top - 10
                             self.create_floating_text("x5", lx, ly, (50, 255, 50, 255), coin)
 
-                            # ИСПРАВЛЕНИЕ: Звук только если не выключен
                             if self.sound_manager.lucky_success and not self.sound_manager.muted:
                                 self.sound_manager.lucky_success.play()
                             coin.sound_played = True
 
-                    elif isinstance(coin, CursedCoin):
-                        if outcome > 0 and not coin.sound_played:
+                    # Успех черной монетки
+                    if isinstance(coin, CursedCoin):
+                        if not coin.sound_played:
                             current_balance = self.balance.get()
                             profit = int(current_balance * 99)
                             self._add_income(profit)
-                            updated_balance = self.balance.get()
-                            self.balance.set(updated_balance)
                             cx = coin.sprite.right + 10
                             cy = coin.sprite.top - 10
                             self.create_floating_text("x100", cx, cy, (255, 50, 50, 255), coin)
 
-                            # ИСПРАВЛЕНИЕ: Звук только если не выключен
                             if self.sound_manager.cursed_success and not self.sound_manager.muted:
                                 self.sound_manager.cursed_success.play()
                             coin.sound_played = True
 
-                        if coin.bankruptcy_triggered:
-                            # ИСПРАВЛЕНИЕ: Звук только если не выключен
-                            if self.sound_manager.cursed_fail and not self.sound_manager.muted:
-                                self.sound_manager.cursed_fail.play()
-                            cx_pos, cy_pos = coin.sprite.center_x, coin.sprite.center_y
-                            self.balance.set(0)
-                            self.create_explosion_particles(cx_pos, cy_pos)
-                            for c in self.coins:
-                                if c is not coin:
-                                    dx = c.sprite.center_x - cx_pos
-                                    dy = c.sprite.center_y - cy_pos
-                                    dist_sq = dx * dx + dy * dy
-                                    if dist_sq > 0:
-                                        dist = math.sqrt(dist_sq)
-                                        force = 2000.0 * self.scale_factor * (
-                                                1.0 - min(dist / (1000.0 * self.scale_factor), 0.5))
-                                        nx = dx / dist
-                                        ny = dy / dist
-                                        c.vx += nx * force
-                                        c.vy += ny * force
-                                        c.is_moving = True
-                                        c._select_flying_animation()
-                            coin.bankruptcy_triggered = False
-                            self.create_explosion_particles(cx_pos, cy_pos)
-                            self.shake_timer = 1.0
-                            self.shake_intensity = 80.0 * self.scale_factor
-                            coin.sound_played = True
+                # === ЛОГИКА НЕУДАЧИ (Вне зависимости от outcome) ===
+                # Проверяем флаг банкротства только для CursedCoin
+                if isinstance(coin, CursedCoin) and coin.bankruptcy_triggered:
+                    # 1. Обнуляем баланс
+                    self.balance.set(0)
+
+                    # 2. Звук провала
+                    if self.sound_manager.cursed_fail and not self.sound_manager.muted:
+                        self.sound_manager.cursed_fail.play()
+
+                    cx_pos, cy_pos = coin.sprite.center_x, coin.sprite.center_y
+
+                    # 3. Эффекты
+                    self.create_explosion_particles(cx_pos, cy_pos)
+                    for c in self.coins:
+                        if c is not coin:
+                            dx = c.sprite.center_x - cx_pos
+                            dy = c.sprite.center_y - cy_pos
+                            dist_sq = dx * dx + dy * dy
+                            if dist_sq > 0:
+                                dist = math.sqrt(dist_sq)
+                                force = 2000.0 * self.scale_factor * (
+                                        1.0 - min(dist / (1000.0 * self.scale_factor), 0.5))
+                                nx = dx / dist
+                                ny = dy / dist
+                                c.vx += nx * force
+                                c.vy += ny * force
+                                c.is_moving = True
+                                c._select_flying_animation()
+
+                    self.shake_timer = 1.0
+                    self.shake_intensity = 80.0 * self.scale_factor
+
+                    # Сбрасываем флаг, чтобы не сработало дважды
+                    coin.bankruptcy_triggered = False
+                    coin.sound_played = True
 
                 if coin.needs_toss_sound:
                     c_type = self._get_coin_type_string(coin)
@@ -585,6 +776,12 @@ class GameController:
             self.ui.update_explosion_state(self.gold_explosion_unlocked)
             self.ui.update_wisp_state(self.wisp is not None)
             self.ui.update_zone_state(has_zone_2=(self.zone_2 is not None), has_zone_5=(self.zone_5 is not None))
+            self.ui.update_tornado_state(self.tornado_unlocked)
+            self.ui.update_meteor_state(self.meteor_unlocked)
+            self.ui.update_combo_unlocked_state(self.combo_unlocked)
+
+            # Обновляем UI Престижа каждый кадр
+            self._update_prestige_ui()
 
             if self.shake_timer > 0:
                 self.shake_timer -= dt
@@ -959,363 +1156,6 @@ class GameController:
                 particle_data['decay_speed'] = 1.0
             self.particles.append(particle_data)
 
-    def try_buy_upgrade(self, upgrade_id: str) -> bool:
-        max_level = -1
-        for tab_groups in self.ui.tab_content.values():
-            for grp in tab_groups:
-                for b in grp.buttons:
-                    if b.upgrade_id == upgrade_id:
-                        max_level = b.max_level
-                        break
-
-        if upgrade_id == "new_game":
-            self.reset_game()
-            return True
-
-        cost = self.upgrade_prices.get(upgrade_id, 0)
-        if cost == 0 and upgrade_id not in ["fuse_to_silver", "fuse_to_gold"]:
-            if upgrade_id == "upgrade_combo_limit": cost = 10000000
-
-        if self.balance.can_spend(cost):
-            self.balance.spend(cost)
-            success = True
-
-            if upgrade_id == "buy_bronze_coin":
-                coin = self.spawn_coin("bronze")
-                if coin:
-                    self.bronze_coin_level += 1
-                    new_price = math.ceil(cost * 1.1)
-                    self.upgrade_prices[upgrade_id] = new_price
-                    self.ui.update_button(upgrade_id, new_price, level=self.bronze_coin_level)
-                else:
-                    success = False
-
-            elif upgrade_id == "fuse_to_silver":
-                if self.silver_fusions_count >= self.max_silver_fusions:
-                    self.ui.set_button_disabled("fuse_to_silver",
-                                                f"Слияние в серебро (Макс. {self.max_silver_fusions})")
-                    success = False
-                else:
-                    bronze_coins = [c for c in self.coins if isinstance(c, BronzeCoin)]
-                    if len(bronze_coins) >= 5:
-                        target_x = bronze_coins[0].sprite.center_x
-                        target_y = bronze_coins[0].sprite.center_y
-                        for i in range(5):
-                            c = bronze_coins[i]
-                            self.coins.remove(c)
-                        self.create_fusion_flash(target_x, target_y, "silver")
-                        self.spawn_coin("silver", x=target_x, y=target_y)
-                        if self.sound_manager.merge_sound:
-                            self.sound_manager.merge_sound.play()
-                        self.silver_fusions_count += 1
-                        self._update_fusion_buttons()
-                    else:
-                        success = False
-
-            elif upgrade_id == "fuse_to_gold":
-                if self.gold_fusions_count >= self.max_gold_fusions:
-                    self.ui.set_button_disabled("fuse_to_gold", f"Слияние в золото (Макс. {self.max_gold_fusions})")
-                    success = False
-                else:
-                    silver_coins = [c for c in self.coins if isinstance(c, SilverCoin)]
-                    if len(silver_coins) >= 3:
-                        target_x = silver_coins[0].sprite.center_x
-                        target_y = silver_coins[0].sprite.center_y
-                        for i in range(3):
-                            c = silver_coins[i]
-                            self.coins.remove(c)
-                        self.create_fusion_flash(target_x, target_y, "gold")
-                        self.spawn_coin("gold", x=target_x, y=target_y)
-                        if self.sound_manager.merge_sound:
-                            self.sound_manager.merge_sound.play()
-                        self.gold_fusions_count += 1
-                        self._update_fusion_buttons()
-                    else:
-                        success = False
-
-            elif upgrade_id == "buy_victory":
-                if not self.game_over_active:
-                    try:
-                        os.remove(self.get_save_path())
-                    except:
-                        pass
-                    self.game_over_active = True
-                    self.game_over_timer = 0.0
-                    self.game_over_stage = 0
-                    self.ui.mark_purchased(upgrade_id)
-                else:
-                    success = False
-
-            elif upgrade_id == "silver_crit_upgrade":
-                self.silver_crit_level += 1
-                new_price = math.ceil(cost * 1.6)
-                self.upgrade_prices[upgrade_id] = new_price
-                self.ui.update_button(upgrade_id, new_price, level=self.silver_crit_level)
-
-            elif upgrade_id == "grab_upgrade":
-                self.grab_purchased = True
-                self.ui.mark_purchased(upgrade_id)
-
-            elif upgrade_id == "gold_explosion_upgrade":
-                self.gold_explosion_unlocked = True
-                for coin in self.coins:
-                    if isinstance(coin, GoldCoin): coin.explosion_chance = 0.5
-                self.ui.mark_purchased(upgrade_id)
-
-            elif upgrade_id == "wisp_spawn":
-                if not self.wisp:
-                    self.wisp = Wisp(self.width / 2, self.height / 2, self.assets.wisp_sprites,
-                                     speed=100 * self.scale_factor, scale=0.33, scale_factor=self.scale_factor)
-                    self.wisp_list.append(self.wisp)
-                    self.ui.mark_purchased(upgrade_id)
-                else:
-                    success = False
-
-            elif upgrade_id == "wisp_speed":
-                if self.wisp:
-                    if max_level > 0 and self.wisp_speed_level >= max_level:
-                        success = False
-                    else:
-                        self.wisp.upgrade_speed(50)
-                        self.wisp_speed_level += 1
-                        new_price = math.ceil(cost * 1.2)
-                        self.upgrade_prices[upgrade_id] = new_price
-                        self.ui.update_button(upgrade_id, new_price, level=self.wisp_speed_level)
-                else:
-                    success = False
-
-            elif upgrade_id == "unlock_combo":
-                if not self.combo_unlocked:
-                    self.combo_unlocked = True
-                    self.ui.mark_purchased(upgrade_id)
-                else:
-                    success = False
-
-            elif upgrade_id == "upgrade_combo_limit":
-                if self.combo_limit >= 10.0:
-                    self.ui.set_button_disabled("upgrade_combo_limit", "Лимит комбо (Макс.)")
-                    success = False
-                else:
-                    self.combo_limit_level += 1
-                    new_limit = self.combo_base_limit + (self.combo_limit_level * 0.5)
-                    if new_limit > 10.0: new_limit = 10.0
-                    self.combo_limit = new_limit
-                    if cost == 0: cost = 10000000
-                    new_price = math.ceil(cost * 1.5)
-                    self.upgrade_prices[upgrade_id] = new_price
-                    if self.combo_limit >= 10.0:
-                        self.ui.set_button_disabled("upgrade_combo_limit", "Лимит комбо (Макс.)")
-                    else:
-                        self.ui.update_button(upgrade_id, new_price, level=self.combo_limit_level)
-
-            elif upgrade_id == "wisp_size":
-                if self.wisp:
-                    if max_level > 0 and self.wisp_size_level >= max_level:
-                        success = False
-                    else:
-                        self.wisp.upgrade_scale(0.025)
-                        self.wisp_size_level += 1
-                        new_price = math.ceil(cost * 1.2)
-                        self.upgrade_prices[upgrade_id] = new_price
-                        self.ui.update_button(upgrade_id, new_price, level=self.wisp_size_level)
-                else:
-                    success = False
-
-            elif upgrade_id == "auto_flip_upgrade":
-                if max_level > 0 and self.auto_flip_level >= max_level:
-                    success = False
-                else:
-                    self.auto_flip_level += 1
-                    new_price = math.ceil(cost * 1.4)
-                    self.upgrade_prices[upgrade_id] = new_price
-                    self.ui.update_button(upgrade_id, new_price, level=self.auto_flip_level, name="Авто-переворот")
-
-            elif upgrade_id == "bronze_value_upgrade":
-                if max_level > 0 and self.bronze_value_level >= max_level:
-                    success = False
-                else:
-                    self.bronze_value_level += 1
-                    new_price = math.ceil(cost * 1.5)
-                    self.upgrade_prices[upgrade_id] = new_price
-                    for coin in self.coins:
-                        if isinstance(coin, BronzeCoin):
-                            coin.value *= 2
-                    self.ui.update_button(upgrade_id, new_price, level=self.bronze_value_level)
-
-            elif upgrade_id == "silver_value_upgrade":
-                if max_level > 0 and self.silver_value_level >= max_level:
-                    success = False
-                else:
-                    self.silver_value_level += 1
-                    new_price = math.ceil(cost * 1.5)
-                    self.upgrade_prices[upgrade_id] = new_price
-                    for coin in self.coins:
-                        if isinstance(coin, SilverCoin):
-                            coin.value *= 2
-                    self.ui.update_button(upgrade_id, new_price, level=self.silver_value_level)
-
-            elif upgrade_id == "gold_value_upgrade":
-                if max_level > 0 and self.gold_value_level >= max_level:
-                    success = False
-                else:
-                    self.gold_value_level += 1
-                    new_price = math.ceil(cost * 1.5)
-                    self.upgrade_prices[upgrade_id] = new_price
-                    for coin in self.coins:
-                        if isinstance(coin, GoldCoin):
-                            coin.value *= 2
-                    self.ui.update_button(upgrade_id, new_price, level=self.gold_value_level)
-
-            elif upgrade_id == "spawn_zone_2":
-                if self.zone_2 is None:
-                    z2 = MultiplyZone(self.width, self.height, 2.0, (100, 255, 100, 100))
-                    self.zones.append(z2)
-                    self.zone_2 = z2
-                    self.ui.mark_purchased(upgrade_id)
-                    self.ui.update_zone_state(has_zone_2=True)
-                else:
-                    success = False
-
-            elif upgrade_id == "spawn_zone_5":
-                if self.zone_5 is None:
-                    z5 = MultiplyZone(self.width, self.height, 5.0, (160, 32, 240, 100))
-                    self.zones.append(z5)
-                    self.zone_5 = z5
-                    self.ui.mark_purchased(upgrade_id)
-                    self.ui.update_zone_state(has_zone_5=True)
-                else:
-                    success = False
-
-            elif upgrade_id == "upgrade_zone_2_size":
-                if self.zone_2:
-                    if max_level > 0 and self.zone_2_size_level >= max_level:
-                        success = False
-                    else:
-                        self.zone_2.upgrade_size(1.03)
-                        self.zone_2_size_level += 1
-                        new_price = math.ceil(cost * 1.3)
-                        self.upgrade_prices[upgrade_id] = new_price
-                        self.ui.update_button(upgrade_id, new_price, level=self.zone_2_size_level)
-                else:
-                    success = False
-
-            elif upgrade_id == "upgrade_zone_5_size":
-                if self.zone_5:
-                    if max_level > 0 and self.zone_5_size_level >= max_level:
-                        success = False
-                    else:
-                        self.zone_5.upgrade_size(1.03)
-                        self.zone_5_size_level += 1
-                        new_price = math.ceil(cost * 1.3)
-                        self.upgrade_prices[upgrade_id] = new_price
-                        self.ui.update_button(upgrade_id, new_price, level=self.zone_5_size_level)
-                else:
-                    success = False
-
-            elif upgrade_id == "silver_crit_chance_upgrade":
-                if max_level > 0 and self.silver_crit_chance_level >= max_level:
-                    success = False
-                else:
-                    self.silver_crit_chance_level += 1
-                    new_price = math.ceil(cost * 1.5)
-                    self.upgrade_prices[upgrade_id] = new_price
-                    self.ui.update_button(upgrade_id, new_price, level=self.silver_crit_chance_level)
-
-            elif upgrade_id == "upgrade_zone_2_mult":
-                if self.zone_2:
-                    if max_level > 0 and self.zone_2_mult_level >= max_level:
-                        success = False
-                    else:
-                        self.zone_2.upgrade_multiplier(0.2)
-                        self.zone_2_mult_level += 1
-                        new_price = math.ceil(cost * 1.5)
-                        self.upgrade_prices[upgrade_id] = new_price
-                        self.ui.update_button(upgrade_id, new_price, level=self.zone_2_mult_level)
-                else:
-                    success = False
-
-            elif upgrade_id == "upgrade_zone_5_mult":
-                if self.zone_5:
-                    if max_level > 0 and self.zone_5_mult_level >= max_level:
-                        success = False
-                    else:
-                        self.zone_5.upgrade_multiplier(0.4)
-                        self.zone_5_mult_level += 1
-                        new_price = math.ceil(cost * 1.5)
-                        self.upgrade_prices[upgrade_id] = new_price
-                        self.ui.update_button(upgrade_id, new_price, level=self.zone_5_mult_level)
-                else:
-                    success = False
-
-            elif upgrade_id == "spawn_tornado":
-                if not self.tornado_unlocked:
-                    self.tornado_unlocked = True
-                    self.ui.update_tornado_state(True)
-                else:
-                    success = False
-
-            elif upgrade_id == "tornado_cooldown_upgrade":
-                # Явная проверка на максимальный уровень
-                current_max = -1
-                for tab_groups in self.ui.tab_content.values():
-                    for grp in tab_groups:
-                        for b in grp.buttons:
-                            if b.upgrade_id == upgrade_id:
-                                current_max = b.max_level
-                                break
-
-                if current_max > 0 and self.tornado_cooldown_level >= current_max:
-                    success = False
-                else:
-                    # Проверка баланса на всякий случай
-                    if self.balance.can_spend(cost):
-                        self.balance.spend(cost)
-                        self.tornado_cooldown_level += 1
-                        new_price = math.ceil(cost * 1.3)
-                        self.upgrade_prices[upgrade_id] = new_price
-                        self.ui.update_button(upgrade_id, new_price, level=self.tornado_cooldown_level)
-                        success = True
-                    else:
-                        success = False
-
-            elif upgrade_id == "spawn_meteor":
-                if not self.meteor_unlocked:
-                    self.meteor_unlocked = True
-                    self.ui.update_meteor_state(True)
-                    self.ui.mark_purchased(upgrade_id)
-                else:
-                    success = False
-
-            elif upgrade_id == "meteor_cooldown_upgrade":
-                # Та же логика для метеорита
-                current_max = -1
-                for tab_groups in self.ui.tab_content.values():
-                    for grp in tab_groups:
-                        for b in grp.buttons:
-                            if b.upgrade_id == upgrade_id:
-                                current_max = b.max_level
-                                break
-
-                if current_max > 0 and self.meteor_cooldown_level >= current_max:
-                    success = False
-                else:
-                    if self.balance.can_spend(cost):
-                        self.balance.spend(cost)
-                        self.meteor_cooldown_level += 1
-                        new_price = math.ceil(cost * 1.3)
-                        self.upgrade_prices[upgrade_id] = new_price
-                        self.ui.update_button(upgrade_id, new_price, level=self.meteor_cooldown_level)
-                        success = True
-                    else:
-                        success = False
-
-            if success:
-                return True
-            else:
-                self.balance.add(cost)
-                return False
-        return False
-
     def get_save_path(self):
         import sys
         import os
@@ -1325,6 +1165,7 @@ class GameController:
     def save_game(self) -> None:
         data = {
             "balance": self.balance.get(),
+            "prestige": self.prestige.get_data(),  # Сохраняем престиж
             "upgrade_prices": self.upgrade_prices,
             "silver_crit_level": self.silver_crit_level,
             "beetle_stash": self.beetle_stash,
@@ -1364,12 +1205,16 @@ class GameController:
             "combo_limit_level": self.combo_limit_level,
             "combo_value": self.combo_value
         }
+
+        # Сохранение Виспа
         if self.wisp:
             data["wisp"] = {
                 "speed": self.wisp.speed, "scale": self.wisp.scale,
                 "x": self.wisp.center_x, "y": self.wisp.center_y,
                 "vx": self.wisp.vx, "vy": self.wisp.vy
             }
+
+        # Сохранение Зон
         for z in self.zones:
             z_type = "unknown"
             if z is self.zone_2:
@@ -1380,6 +1225,8 @@ class GameController:
                 "type": z_type, "multiplier": z.multiplier, "size": z.size,
                 "x": z.x, "y": z.y, "vx": z.vx, "vy": z.vy
             })
+
+        # Сохранение Монет
         for coin in self.coins:
             coin_type = "bronze"
             if isinstance(coin, SilverCoin):
@@ -1400,6 +1247,7 @@ class GameController:
                 "is_moving": coin.is_moving,
                 "angle": coin.angle
             })
+
         try:
             with open(self.get_save_path(), "w") as f:
                 json.dump(data, f, ensure_ascii=True)
@@ -1415,8 +1263,14 @@ class GameController:
             if data is None: return False
 
             self.balance._value = data["balance"]
-            self.upgrade_prices = data.get("upgrade_prices", self.upgrade_prices)
 
+            # === ЗАГРУЗКА ПРЕСТИЖА ===
+            if "prestige" in data:
+                self.prestige.load_data(data["prestige"])
+            else:
+                self.prestige = PrestigeManager()
+
+            self.upgrade_prices = data.get("upgrade_prices", {})
             self.beetle_stash = data.get("beetle_stash", 0)
             self.silver_crit_level = data["silver_crit_level"]
             self.silver_crit_chance_level = data.get("silver_crit_chance_level", 1)
@@ -1460,16 +1314,7 @@ class GameController:
             if loaded_combo_value > self.combo_limit: loaded_combo_value = self.combo_limit
             self.combo_value = loaded_combo_value
 
-            if self.tornado_unlocked:
-                self.ui.mark_purchased("spawn_tornado")
-                self.ui.update_tornado_state(True)
-            self.ui.update_button("tornado_cooldown_upgrade", self.upgrade_prices["tornado_cooldown_upgrade"],
-                                  level=self.tornado_cooldown_level)
-            if self.combo_unlocked:
-                self.ui.mark_purchased("unlock_combo")
-            self.ui.update_button("upgrade_combo_limit", self.upgrade_prices.get("upgrade_combo_limit", 10000000),
-                                  level=self.combo_limit_level)
-
+            # Загрузка Wisp
             wisp_data = data.get("wisp")
             if wisp_data:
                 self.wisp_list.clear()
@@ -1481,6 +1326,7 @@ class GameController:
                 self.wisp.vy = wisp_data["vy"]
                 self.wisp_list.append(self.wisp)
 
+            # Загрузка Зон
             self.zones.clear()
             self.zone_2 = None
             self.zone_5 = None
@@ -1503,26 +1349,25 @@ class GameController:
                 z.vy = z_data["vy"]
                 self.zones.append(z)
 
+            # Загрузка Монет
             self.coins.clear()
             for c_data in data["coins"]:
                 c_type = c_data["type"]
 
                 coin_value = 1
                 if c_type == "bronze":
-                    coin_value = self.base_coin_values["bronze"] * (2 ** self.bronze_value_level)
+                    coin_value = self.base_coin_values["bronze"] * (1.5 ** self.bronze_value_level)
                     c = BronzeCoin(c_data["x"], c_data["y"], self.assets.bronze_coin_sprites, value=coin_value,
-                                   scale=c_data["scale"],
-                                   scale_factor=self.scale_factor)
-                    c.angle = c_data.get("angle", 0.0)
-                elif c_type == "silver":
-                    coin_value = self.base_coin_values["silver"] * (2 ** self.silver_value_level)
-                    crit_chance = 0.01 * self.silver_crit_chance_level
-                    c = SilverCoin(c_data["x"], c_data["y"], self.assets.silver_coin_sprites, crit_chance,
-                                   value=coin_value,
                                    scale=c_data["scale"], scale_factor=self.scale_factor)
                     c.angle = c_data.get("angle", 0.0)
+                elif c_type == "silver":
+                    coin_value = self.base_coin_values["silver"] * (1.5 ** self.silver_value_level)
+                    crit_chance = 0.01 * self.silver_crit_chance_level
+                    c = SilverCoin(c_data["x"], c_data["y"], self.assets.silver_coin_sprites, crit_chance,
+                                   value=coin_value, scale=c_data["scale"], scale_factor=self.scale_factor)
+                    c.angle = c_data.get("angle", 0.0)
                 elif c_type == "gold":
-                    coin_value = self.base_coin_values["gold"] * (2 ** self.gold_value_level)
+                    coin_value = self.base_coin_values["gold"] * (1.5 ** self.gold_value_level)
                     c = GoldCoin(c_data["x"], c_data["y"], self.assets.gold_coin_sprites, value=coin_value,
                                  scale=c_data["scale"], scale_factor=self.scale_factor)
                     c.angle = c_data.get("angle", 0.0)
@@ -1534,6 +1379,8 @@ class GameController:
                     c = CursedCoin(c_data["x"], c_data["y"], self.assets.cursed_coin_sprites, scale=c_data["scale"],
                                    scale_factor=self.scale_factor)
                     c.angle = c_data.get("angle", 0.0)
+                else:
+                    continue
 
                 c.vx = c_data["vx"]
                 c.vy = c_data["vy"]
@@ -1548,19 +1395,13 @@ class GameController:
 
             self._sync_ui_prices()
 
-            # --- ФИКС: Принудительно обновляем состояние кнопок после загрузки ---
-            # Если уровень достиг максимума, отключаем кнопку явно
+            # Обновление UI флагов
             if self.tornado_cooldown_level >= 10:
                 self.ui.set_button_disabled("tornado_cooldown_upgrade", "КД Торнадо (Макс.)")
-
             if self.meteor_cooldown_level >= 10:
                 self.ui.set_button_disabled("meteor_cooldown_upgrade", "КД метеорита (Макс.)")
-
-            # Проверяем другие улучшения с лимитом, чтобы они тоже были серыми, если куплены до конца
             if self.silver_crit_chance_level >= 50:
                 self.ui.set_button_disabled("silver_crit_chance_upgrade", "Шанс крита (Макс.)")
-            # ... (можно добавить и другие по аналогии, если нужно)
-            # -------------------------------------------------------------------
 
             if self.grab_purchased: self.ui.mark_purchased("grab_upgrade")
             if self.gold_explosion_unlocked: self.ui.mark_purchased("gold_explosion_upgrade")
@@ -1580,108 +1421,77 @@ class GameController:
             print(f"DEBUG: Error loading game: {e}")
             return False
 
-    def reset_game(self) -> bool:
-        if os.path.exists(self.get_save_path()):
-            os.remove(self.get_save_path())
+    def reset_game(self, hard_reset=False) -> bool:
         self.coins.clear()
         self.particles.clear()
         self.zones.clear()
         self.zone_2 = None
         self.zone_5 = None
         self.beetle = None
+        self.beetle_stash = 0
         self.wisp = None
         self.wisp_list.clear()
         self.crater = None
         self.meteor = None
         self.explosions.clear()
-        self.meteor_unlocked = False
-        self.meteor_cooldown_level = 0
-        self.beetle_stash = 0
-        self.balance._value = 0
-        self.silver_crit_level = 1
-        self.auto_flip_level = 0
+
         self.bronze_coin_level = 1
         self.silver_coin_level = 0
-        self.silver_crit_chance_level = 1
         self.gold_coin_level = 0
         self.bronze_value_level = 0
         self.silver_value_level = 0
         self.gold_value_level = 0
+        self.silver_crit_level = 1
+        self.silver_crit_chance_level = 1
+        self.auto_flip_level = 0
         self.wisp_speed_level = 0
         self.wisp_size_level = 0
         self.zone_2_size_level = 0
         self.zone_2_mult_level = 0
         self.zone_5_size_level = 0
         self.zone_5_mult_level = 0
+        self.tornado_cooldown_level = 0
+        self.meteor_cooldown_level = 0
+
         self.has_gold_coin = False
         self.grab_purchased = False
         self.gold_explosion_unlocked = False
+        self.meteor_unlocked = False
+        self.tornado_unlocked = False
+
         self.combo_unlocked = False
         self.combo_value = 1.0
-        self.combo_limit_level = 1
+        self.combo_limit_level = 0
         self.combo_limit = self.combo_base_limit
-        self.combo_watch_timer = 0.0
-        self.combo_visuals = []
-        self.tornado = None
-        self.tornado_unlocked = False
-        self.tornado_cooldown_level = 0
-        self.tornado_respawn_timer = 0.0
-        self.tornado_list.clear()
 
         self.silver_fusions_count = 0
         self.gold_fusions_count = 0
-        self._update_fusion_buttons()
 
-        self.upgrade_prices = {
-            "buy_bronze_coin": 10,
-            "silver_crit_upgrade": 20000,
-            "silver_crit_chance_upgrade": 50000,
-            "grab_upgrade": 25000,
-            "gold_explosion_upgrade": 15000,
-            "wisp_spawn": 100000,
-            "unlock_combo": 50000000,
-            "upgrade_combo_limit": 100000000,
-            "wisp_speed": 100000,
-            "wisp_size": 100000,
-            "spawn_zone_2": 80000000,
-            "spawn_zone_5": 500000000000,
-            "upgrade_zone_2_size": 20000000,
-            "upgrade_zone_5_size": 100000000000,
-            "upgrade_zone_2_mult": 40000000,
-            "upgrade_zone_5_mult": 200000000000,
-            "spawn_tornado": 2000000000000,
-            "tornado_cooldown_upgrade": 5000000000000,
-            "auto_flip_upgrade": 1000,
-            "bronze_value_upgrade": 50,
-            "silver_value_upgrade": 1000,
-            "gold_value_upgrade": 25000,
-            "spawn_meteor": 1000000000000000,
-            "buy_victory": 10_000_000_000_000_000_000_000,
-            "meteor_cooldown_upgrade": 2000000000000000,
-            "fuse_to_silver": 0,
-            "fuse_to_gold": 0,
-        }
+        self.balance._value = 0
 
-        for tab_groups in self.ui.tab_content.values():
-            for grp in tab_groups:
-                for b in grp.buttons:
-                    b.is_purchased = False
-                    self.ui._enabled[b.upgrade_id] = True
-                    if b.upgrade_id == "buy_bronze_coin":
-                        b.level = 1
-                    elif b.upgrade_id == "silver_crit_upgrade":
-                        b.level = 1
-                    elif b.upgrade_id == "silver_crit_chance_upgrade":
-                        b.level = 1
-                    else:
-                        b.level = 0
+        self.beetle_respawn_interval = random.uniform(240.0, 300.0)
+        self.beetle_respawn_timer = 0.0
 
-        self.ui.update_meteor_state(False)
-        self.ui.update_tornado_state(False)
-        self.ui.update_button("buy_victory", self.upgrade_prices["buy_victory"], level=0)
+        if hard_reset:
+            self.prestige = PrestigeManager()
+            if os.path.exists(self.get_save_path()):
+                try:
+                    os.remove(self.get_save_path())
+                except:
+                    pass
+        else:
+            self.prestige.reset_run_stats()
 
-        self.spawn_coin("bronze", x=self.start_coin_x, y=self.start_coin_y)
+        # ВАЖНО: Сброс цен!
+        self.upgrade_prices = {}
+
+        self.spawn_coin("bronze")
         self._sync_ui_prices()
+
+        self.ui.reset_all_buttons()
+        self._update_prestige_ui()
+
+        self.confirmation_dialog = None
         return True
 
     def spawn_beetle(self) -> None:
@@ -1692,13 +1502,15 @@ class GameController:
 
     def kill_beetle(self) -> None:
         if not self.beetle: return
-        # ИСПРАВЛЕНИЕ: Звук только если не выключен
-        if self.beetle_dead_sound and not self.sound_manager.muted:
-            self.beetle_dead_sound.play()
 
-        reward = int(self.beetle_stash * 5)
+        if self.sound_manager.beetle_dead_sound and not self.sound_manager.muted:
+            self.sound_manager.beetle_dead_sound.play()
+
+        # ИСПРАВЛЕНО: Возвращаем накопленное x2
+        reward = int(self.beetle_stash * 2)
         self.balance.add(reward)
-        self.beetle_stash = 0
+        self.beetle_stash = 0  # Сброс накопленного
+
         self.beetle.start_death()
 
         if reward > 0:
@@ -1708,9 +1520,10 @@ class GameController:
                 reward_str = f"+{reward / 1000:.1f}K"
             else:
                 reward_str = f"+{reward}"
-            self.create_floating_text(reward_str, self.beetle.center_x, self.beetle.top + 20, (255, 255, 255, 255))
+            # Текст зеленый, чтобы было видно, что это награда
+            self.create_floating_text(reward_str, self.beetle.center_x, self.beetle.top + 20, (50, 255, 50, 255))
 
-        self.beetle_respawn_interval = random.uniform(420.0, 600.0)
+        self.beetle_respawn_interval = random.uniform(240.0, 300.0)  # Следующий через 4-5 мин
 
     def spawn_beetle_initial(self):
         self.beetle_respawn_interval = random.uniform(360.0, 420.0)
@@ -1868,13 +1681,20 @@ class GameController:
 
     def _add_income(self, amount: int) -> None:
         if amount <= 0: return
+        # Применяем множитель престижа
+        final_amount = int(amount * self.prestige.multiplier)
+
+        # Добавляем в статистику для престижа
+        self.prestige.add_income(final_amount)
+
+        # === ЛОГИКА ЖУКА (75% в тайник, 25% на баланс) ===
         if self.beetle:
-            kept = int(amount * 0.5)
-            stolen = amount - kept
+            kept = int(final_amount * 0.25)
+            stolen = final_amount - kept
             self.balance.add(kept)
             self.beetle_stash += stolen
         else:
-            self.balance.add(amount)
+            self.balance.add(final_amount)
 
     def _update_fusion_buttons(self):
         """Обновляет состояние кнопок слияния в UI, убрали установку русского текста."""
@@ -1882,3 +1702,96 @@ class GameController:
         # Эта функция остается пустой или можно удалить её вызовы,
         # но для безопасности оставим её пустой, чтобы не ломать вызовы из load_game/reset_game.
         pass
+
+    def _calculate_price(self, base_id: str, level: int) -> int:
+        base = self.base_prices.get(base_id, 100)
+        mult = self.price_mult.get(base_id, 1.15)
+        return int(base * (mult ** level))
+
+    def _get_current_level(self, upgrade_id):
+        if upgrade_id == "bronze_value_upgrade": return self.bronze_value_level
+        if upgrade_id == "silver_value_upgrade": return self.silver_value_level
+        if upgrade_id == "gold_value_upgrade": return self.gold_value_level
+        if upgrade_id == "silver_crit_upgrade": return self.silver_crit_level
+        if upgrade_id == "silver_crit_chance_upgrade": return self.silver_crit_chance_level
+        if upgrade_id == "auto_flip_upgrade": return self.auto_flip_level
+        if upgrade_id == "wisp_speed": return self.wisp_speed_level
+        if upgrade_id == "wisp_size": return self.wisp_size_level
+        if upgrade_id == "upgrade_combo_limit": return self.combo_limit_level
+        if upgrade_id == "upgrade_zone_2_size": return self.zone_2_size_level
+        if upgrade_id == "upgrade_zone_2_mult": return self.zone_2_mult_level
+        if upgrade_id == "upgrade_zone_5_size": return self.zone_5_size_level
+        if upgrade_id == "upgrade_zone_5_mult": return self.zone_5_mult_level
+        if upgrade_id == "tornado_cooldown_upgrade": return self.tornado_cooldown_level
+        if upgrade_id == "meteor_cooldown_upgrade": return self.meteor_cooldown_level
+        if upgrade_id == "buy_bronze_coin": return self.bronze_coin_level
+        return 0
+
+    def _update_prestige_ui(self):
+        gain = self.prestige.calculate_gain()
+        # Принудительно обновляем кнопку в UI
+        self.ui.update_prestige_button(gain, self.prestige.points, self.prestige.multiplier)
+
+    def perform_prestige(self):
+        if self.prestige.can_prestige():
+            # gain = self.prestige.calculate_gain() # Можно использовать для анимации
+            self.prestige.add_point()
+
+            # ВАЖНО: Сбрасываем счетчик заработанного для престижа!
+            self.prestige.reset_run_stats()
+
+            # Полный сброс игры
+            self.coins.clear()
+            self.particles.clear()
+            self.zones.clear()
+            self.zone_2 = None
+            self.zone_5 = None
+            self.beetle = None
+            self.beetle_stash = 0
+            self.wisp = None
+            self.wisp_list.clear()
+            self.crater = None
+            self.meteor = None
+            self.explosions.clear()
+
+            self.bronze_coin_level = 1
+            self.silver_coin_level = 0
+            self.gold_coin_level = 0
+            self.bronze_value_level = 0
+            self.silver_value_level = 0
+            self.gold_value_level = 0
+            self.silver_crit_level = 1
+            self.silver_crit_chance_level = 1
+            self.auto_flip_level = 0
+            self.wisp_speed_level = 0
+            self.wisp_size_level = 0
+            self.zone_2_size_level = 0
+            self.zone_2_mult_level = 0
+            self.zone_5_size_level = 0
+            self.zone_5_mult_level = 0
+            self.tornado_cooldown_level = 0
+            self.meteor_cooldown_level = 0
+            self.has_gold_coin = False
+            self.grab_purchased = False
+            self.gold_explosion_unlocked = False
+            self.meteor_unlocked = False
+            self.tornado_unlocked = False
+            self.combo_unlocked = False
+            self.combo_value = 1.0
+            self.combo_limit_level = 0
+            self.combo_limit = self.combo_base_limit
+            self.silver_fusions_count = 0
+            self.gold_fusions_count = 0
+            self.balance._value = 0
+            self.upgrade_prices = {}  # Сброс цен
+
+            self.spawn_coin("bronze")
+            self._sync_ui_prices()
+            self.ui.reset_all_buttons()
+
+            # Принудительно обновляем UI престижа сразу после сброса
+            self._update_prestige_ui()
+
+            self.beetle_respawn_interval = random.uniform(240.0, 300.0)
+            return True
+        return False

@@ -6,25 +6,21 @@ from logic.assets.sprite_pygame import PygameSprite
 class Tornado(PygameSprite):
     def __init__(self, x: float, y: float, textures: list, sound, scale: float = 1.0, world_scale: float = 1.0,
                  world_width: int = 1920):
-        # 1. Определяем начальную текстуру
         start_texture = None
         self.textures = textures
 
         if self.textures:
             start_texture = self.textures[0]
         else:
-            # Создаем заглушку
             start_texture = pygame.Surface((100, 100), pygame.SRCALPHA)
             start_texture.fill((100, 100, 255))
             self.texture = start_texture
 
-        # 2. Инициализируем родительский класс PygameSprite
         super().__init__(image=start_texture, scale=scale)
 
         self.center_x = x
         self.center_y = y
 
-        # Звук (sound теперь объект pygame.mixer.Sound)
         if sound:
             sound.play()
 
@@ -44,7 +40,6 @@ class Tornado(PygameSprite):
     def update(self, dt: float) -> bool:
         self.timer += dt
 
-        # Логика прозрачности (используем свойство alpha PygameSprite)
         alpha = 255
         if self.timer < self.fade_duration:
             alpha = int(255 * (self.timer / self.fade_duration))
@@ -52,7 +47,6 @@ class Tornado(PygameSprite):
             alpha = int(255 * ((self.duration - self.timer) / self.fade_duration))
         self.alpha = alpha
 
-        # Анимация
         if self.textures and len(self.textures) > 1:
             self.anim_timer += dt
             if self.anim_timer >= self.anim_speed:
@@ -65,7 +59,6 @@ class Tornado(PygameSprite):
         return True
 
     def affect_coin(self, coin, dt):
-        # Логика физики не меняется
         if not hasattr(coin, 'vx'):
             return
         if coin.wisp_immunity_timer > 0:
@@ -99,20 +92,11 @@ class Tornado(PygameSprite):
             # ВЫШЛА ИЗ РАДИУСА
             if coin.tornado_hit:
                 coin.tornado_hit = False
-                # Убираем is_moving = False, чтобы монетка летела по инерции
-                coin.vx *= 0.8 # Оставляем физике трения
+                coin.vx *= 0.8
                 coin.vy *= 0.8
-
-                coin.anim = []
-                coin.landed = True
-                coin.just_landed = True
-                coin.manual_override = False
                 coin.tornado_exit_time = 1.5
-
-                if coin.fixed_outcome_texture:
-                     coin.sprite.texture = coin.fixed_outcome_texture
-                else:
-                     coin.sprite.texture = coin.sprites.get("heads")
+                # УБРАНО: Принудительный сброс anim и texture.
+                # Монетка теперь сама упадет по физике (через land), когда скорость упадет или анимация кончится.
 
     def draw(self, surface, screen_height) -> None:
         super().draw(surface, screen_height)

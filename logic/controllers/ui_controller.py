@@ -43,6 +43,7 @@ class UIController:
         self.ui_assets = ui_assets
         self.scale_factor = scale_factor
         self._has_tornado = False
+        self._combo_unlocked = False
 
         # --- ШРИФТЫ ---
         raw_font_path = self.ui_assets.get("font_name", "Arial")
@@ -142,10 +143,14 @@ class UIController:
                               max_level=10),
             ]),
         ]
-        # === ВКЛАДКА 2 ===
+        # === ВКЛАДКА 2 (Настройки) ===
         self.tab_content[2] = [
             _UiGroupStub(get_text("grp_settings"), [
+                # Кнопка Престижа
+                _UiButtonStub("prestige", "", "btn_prestige", 0, is_one_time=False, max_level=-1),
+                # Кнопка Новая игра
                 _UiButtonStub("new_game", "", "btn_new_game", 0, is_one_time=True),
+                # Кнопка Победы
                 _UiButtonStub("buy_victory", "", "btn_victory", 10_000_000_000_000_000_000_000_000, is_one_time=True),
             ]),
         ]
@@ -188,6 +193,11 @@ class UIController:
         return formatted_val
 
     def update_button(self, upgrade_id: str, cost: int, level: int = 0, name: str = None) -> None:
+        # Проверяем, это кнопка престижа? Если да - НЕ обновляем её через этот метод,
+        # так как у неё своя логика обновления (update_prestige_button)
+        if upgrade_id == "prestige":
+            return
+
         for tab_groups in self.tab_content.values():
             for grp in tab_groups:
                 for b in grp.buttons:
@@ -248,7 +258,6 @@ class UIController:
             for grp in tab_groups:
                 for b in grp.buttons:
 
-                    # --- 1. Обновляем название (перевод) ВСЕГДА ---
                     btn_name = get_text(b.base_name)
                     price_str = self._format_number(b.base_cost)
 
@@ -256,6 +265,9 @@ class UIController:
                         self._enabled[b.upgrade_id] = True
                         b.title = btn_name
                         continue
+
+                    if b.upgrade_id == "prestige":
+                        continue  # Управляется отдельным методом
 
                     if b.max_level > 0 and b.level >= b.max_level:
                         b.title = f"{btn_name} ({get_text('status_max')})"
@@ -267,18 +279,58 @@ class UIController:
                         self._enabled[b.upgrade_id] = False
                         continue
 
-                    # --- 2. Логика доступности (Enabled) ---
                     enabled = False
 
                     if b.upgrade_id == "buy_victory":
                         enabled = balance_value >= b.base_cost
                         b.title = f"{btn_name} ({price_str})"
 
-                    elif b.upgrade_id == "silver_crit_upgrade":
-                        enabled = balance_value >= b.base_cost
+                    elif b.upgrade_id == "upgrade_combo_limit":
+                        # ИСПРАВЛЕНО: Если не открыто, кнопка просто затемнена, но цена видна
+                        enabled = self._combo_unlocked and (balance_value >= b.base_cost)
                         if b.level > 0:
                             b.title = f"{btn_name} ({b.level}) ({price_str})"
                         else:
+                            b.title = f"{btn_name} ({price_str})"
+
+                    elif b.upgrade_id == "tornado_cooldown_upgrade":
+                        # ИСПРАВЛЕНО: Если нет торнадо, кнопка затемнена, цена видна
+                        if not self._has_tornado:
+                            enabled = False
+                            b.title = f"{btn_name} ({price_str})"
+                        else:
+                            enabled = b.level < b.max_level and balance_value >= b.base_cost
+                            if b.level > 0:
+                                b.title = f"{btn_name} ({b.level}) ({price_str})"
+                            else:
+                                b.title = f"{btn_name} ({price_str})"
+
+                    elif b.upgrade_id == "meteor_cooldown_upgrade":
+                        # ИСПРАВЛЕНО: Если нет метеора, кнопка затемнена, цена видна
+                        if not self._meteor_unlocked:
+                            enabled = False
+                            b.title = f"{btn_name} ({price_str})"
+                        else:
+                            enabled = b.level < b.max_level and balance_value >= b.base_cost
+                            if b.level > 0:
+                                b.title = f"{btn_name} ({b.level}) ({price_str})"
+                            else:
+                                b.title = f"{btn_name} ({price_str})"
+
+                    elif b.upgrade_id == "spawn_tornado":
+                        if self._has_tornado:
+                            b.title = f"{btn_name} ({get_text('status_purchased')})"
+                            enabled = False
+                        else:
+                            enabled = balance_value >= b.base_cost
+                            b.title = f"{btn_name} ({price_str})"
+
+                    elif b.upgrade_id == "spawn_meteor":
+                        if self._meteor_unlocked:
+                            b.title = f"{btn_name} ({get_text('status_purchased')})"
+                            enabled = False
+                        else:
+                            enabled = balance_value >= b.base_cost
                             b.title = f"{btn_name} ({price_str})"
 
                     elif b.upgrade_id == "grab_upgrade":
@@ -331,43 +383,7 @@ class UIController:
                         else:
                             b.title = f"{btn_name} ({price_str})"
 
-                    elif "meteor" in b.upgrade_id and b.upgrade_id != "spawn_meteor":
-                        if not self._meteor_unlocked:
-                            enabled = False
-                        else:
-                            enabled = b.level < b.max_level and balance_value >= b.base_cost
-                        if b.level > 0:
-                            b.title = f"{btn_name} ({b.level}) ({price_str})"
-                        else:
-                            b.title = f"{btn_name} ({price_str})"
-
-                    elif b.upgrade_id == "spawn_meteor":
-                        if self._meteor_unlocked:
-                            b.title = f"{btn_name} ({get_text('status_purchased')})"
-                            enabled = False
-                        else:
-                            enabled = balance_value >= b.base_cost
-                            b.title = f"{btn_name} ({price_str})"
-
-                    elif b.upgrade_id == "spawn_tornado":
-                        if self._has_tornado:
-                            b.title = f"{btn_name} ({get_text('status_purchased')})"
-                            enabled = False
-                        else:
-                            enabled = balance_value >= b.base_cost
-                            b.title = f"{btn_name} ({price_str})"
-                    elif "tornado" in b.upgrade_id and b.upgrade_id != "spawn_tornado":
-                        if not self._has_tornado:
-                            enabled = False
-                        else:
-                            enabled = b.level < b.max_level and balance_value >= b.base_cost
-                        if b.level > 0:
-                            b.title = f"{btn_name} ({b.level}) ({price_str})"
-                        else:
-                            b.title = f"{btn_name} ({price_str})"
-
                     elif b.upgrade_id == "fuse_to_silver":
-                        # Используем btn_name (переведенное название)
                         if coin_counts and coin_counts.get('bronze', 0) >= 5:
                             enabled = True
                             b.title = f"{btn_name} (5->1)"
@@ -377,7 +393,6 @@ class UIController:
                             b.title = f"{btn_name} ({get_text('status_fuse_need')} {needed})"
 
                     elif b.upgrade_id == "fuse_to_gold":
-                        # Используем btn_name (переведенное название)
                         if coin_counts and coin_counts.get('silver', 0) >= 3:
                             enabled = True
                             b.title = f"{btn_name} (3->1)"
@@ -385,20 +400,6 @@ class UIController:
                             enabled = False
                             needed = 3 - coin_counts.get('silver', 0) if coin_counts else 3
                             b.title = f"{btn_name} ({get_text('status_fuse_need')} {needed})"
-
-                    elif b.upgrade_id == "auto_flip_upgrade":
-                        enabled = balance_value >= b.base_cost
-                        if b.level > 0:
-                            b.title = f"{btn_name} ({b.level}) ({price_str})"
-                        else:
-                            b.title = f"{btn_name} ({price_str})"
-
-                    elif "value_upgrade" in b.upgrade_id:
-                        enabled = balance_value >= b.base_cost
-                        if b.level > 0:
-                            b.title = f"{btn_name} ({b.level}) ({price_str})"
-                        else:
-                            b.title = f"{btn_name} ({price_str})"
 
                     else:
                         enabled = balance_value >= b.base_cost
@@ -420,20 +421,18 @@ class UIController:
                                      self.font_size_header) if self.game_font_path else pygame.font.SysFont("Arial",
                                                                                                             self.font_size_header)
 
-        # --- Рисуем заголовок "Апгрейды" ---
         title_surf = head_font.render(get_text("ui_upgrades"), True, (200, 200, 200))
-        # Размещаем слева сверху (x=padding, y=10)
-        surface.blit(title_surf, (self.panel_x + self.padding, 10))
+        surface.blit(title_surf, (self.panel_x + self.padding, 5))
 
-        # --- Рисуем Баланс ---
         formatted_balance = self._format_number(balance_value)
         bal_font = pygame.font.Font(self.game_font_path,
                                     self.font_size_balance) if self.game_font_path else pygame.font.SysFont("Arial",
                                                                                                             self.font_size_balance)
         bal_surf = bal_font.render(f"{get_text('ui_balance')}: {formatted_balance}", True, (255, 255, 255))
 
-        # Размещаем слева ПОД заголовком (x=padding, y=45)
-        surface.blit(bal_surf, (self.panel_x + self.padding, 45))
+        # ИСПРАВЛЕНО: Баланс сдвинут вниз (header_height - 25 вместо header_height / 2 + 10)
+        bal_rect = bal_surf.get_rect(midleft=(self.panel_x + 20, self.header_height - 25))
+        surface.blit(bal_surf, bal_rect)
 
         self._draw_tab_bar(surface, tabs_rect)
 
@@ -619,3 +618,47 @@ class UIController:
             for i, grp in enumerate(groups):
                 if i < len(grp_keys_list):
                     grp.title = get_text(grp_keys_list[i])
+
+    def update_prestige_button(self, gain: int, total_points: int, multiplier: float):
+        btn = None
+        for groups in self.tab_content.values():
+            for grp in groups:
+                for b in grp.buttons:
+                    if b.upgrade_id == "prestige":
+                        btn = b
+                        break
+
+        if btn:
+            if gain > 0:
+                # Форматируем число (например, 572000... -> 572B)
+                gain_str = self._format_number(gain)
+                # Используем ключ btn_prestige и добавляем_gain
+                btn.title = f"{get_text('btn_prestige')} (+{gain_str})"
+                self._enabled["prestige"] = True
+            else:
+                btn.title = get_text("prestige_need")
+                self._enabled["prestige"] = False
+
+    def update_combo_unlocked_state(self, unlocked: bool):
+        self._combo_unlocked = unlocked
+
+    def reset_all_buttons(self):
+        for tab_groups in self.tab_content.values():
+            for grp in tab_groups:
+                for b in grp.buttons:
+                    b.is_purchased = False
+                    b.level = 0
+                    b.title = get_text(b.base_name)
+
+        self._has_gold = False
+        self._grab_purchased = False
+        self._explosion_purchased = False
+        self._has_wisp = False
+        self._has_zone_2 = False
+        self._has_zone_5 = False
+        self._meteor_unlocked = False
+        self._has_tornado = False
+        self._combo_unlocked = False
+
+        for key in self._enabled:
+            self._enabled[key] = True
