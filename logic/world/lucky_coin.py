@@ -20,22 +20,25 @@ class LuckyCoin(Coin):
             scale=scale,
             scale_factor=scale_factor
         )
+        # === МАССА (Тяжелая) ===
+        self.mass = 1.5
+
         self.is_used = False
-        self.sound_played = False  # ИСПРАВЛЕНО: Добавлен атрибут
+        self.sound_played = False
 
     def land(self) -> None:
-        super().land()
+        super().land()  # Вызывает базовую логику (орел/решка, остановка)
 
-        # Логика Lucky Coin (всегда успех)
+        # Логика Lucky (всегда успех, но controlled by GameController)
         self.last_outcome_value = self.value
         self.sprite.texture = self.sprites["heads"]
 
         # Запуск исчезновения
         self.is_used = True
-        self.lifetime = 2.5  # Исчезнет через 2.5 секунды
-        self.is_fading = True  # Флаг для прозрачности
+        self.lifetime = 2.5
+        self.is_fading = True
 
-    # ЗАЩИТА ОТ ПЕРЕВОРОТА СУЩНОСТЯМИ
+    # ЗАЩИТА ОТ ПЕРЕВОРОТА
     def hit(self, dx: int, dy: int) -> None:
         if self.is_used: return
         super().hit(dx, dy)

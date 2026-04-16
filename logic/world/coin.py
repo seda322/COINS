@@ -41,6 +41,12 @@ class Coin:
         self.vx = 0.0
         self.vy = 0.0
 
+        # === НОВОЕ: МАССА ===
+        self.mass = 1.0  # Базовая масса, переопределяется в наследниках (Бронза 0.8, Золото 1.5)
+
+        # === ИСПРАВЛЕНИЕ ОШИБКИ ===
+        self.is_used = False  # Базовый флаг, чтобы не было ошибок у обычных монет
+
         # Анимация полета
         self.anim = []
         self.anim_index = 0
@@ -113,7 +119,7 @@ class Coin:
             self.sprite.center_x += self.vx * dt
             self.sprite.center_y += self.vy * dt
 
-            # ИСПРАВЛЕНИЕ: Воздушное трение (чтобы монетки падали, а не летели вечно)
+            # Воздушное трение
             if not self.tornado_hit:
                 self.vx *= 0.995
                 self.vy *= 0.995
@@ -169,7 +175,7 @@ class Coin:
             self.check_land_event()
 
     def land(self) -> None:
-        # ИСПРАВЛЕНИЕ: Если мы в торнадо, не приземляемся, а продолжаем анимацию
+        # Если мы в торнадо, не приземляемся, а продолжаем анимацию
         if self.tornado_hit:
             self.anim_index = 0
             if not self.anim:
@@ -221,9 +227,23 @@ class Coin:
             surface.blit(rotated_texture, rect)
 
     def hit_by_coin(self, source_coin, nx, ny) -> None:
+        # === ФИЗИКА МАССЫ (ИМПУЛЬС) ===
+        # dvx = self.vx - source_coin.vx # Для полноценного импульса нужно знать скорость в момент удара
+        # Но так как hit вызывается при коллизии, используем упрощенную модель:
+
+        # Базовая сила от удара
+        base_push = 600 * self.world_scale
+
+        # Масса влияет на то, как сильно нас толкают
+        # Если в нас влетает тяжелая монета, нас сильно откинет (force / self.mass)
+        # Если мы тяжелые, нас слабо качнет
+
+        push_force = base_push / self.mass
+
+        self.vx = nx * push_force
+        self.vy = ny * push_force
+
         self.is_moving = True
-        self.vx = nx * (600 * self.world_scale)
-        self.vy = ny * (600 * self.world_scale)
         self._select_flying_animation()
         self.anim_index = 0
         if self.anim:
@@ -231,20 +251,29 @@ class Coin:
         self.needs_toss_sound = True
 
     def hit(self, dx: int, dy: int) -> None:
+        # Защита для спец-монет
+        if hasattr(self, 'is_used') and self.is_used: return
+
         self.is_moving = True
         self.vx = 0
         self.vy = 0.0
         length = math.sqrt(dx * dx + dy * dy)
         dead_zone = self.radius * 0.2
+
+        # === ФИЗИКА МАССЫ ===
+        # Чем тяжелее монета, тем меньшую начальную скорость она получает от клика
         base_speed = 600 * self.world_scale
+        effective_speed = base_speed / self.mass
+
         if length < dead_zone:
             angle = random.uniform(0, 2 * math.pi)
-            self.vx = math.cos(angle) * base_speed
-            self.vy = math.sin(angle) * base_speed
+            self.vx = math.cos(angle) * effective_speed
+            self.vy = math.sin(angle) * effective_speed
         else:
             if length > 0:
-                self.vx = (-dx / length) * base_speed
-                self.vy = (-dy / length) * base_speed
+                self.vx = (-dx / length) * effective_speed
+                self.vy = (-dy / length) * effective_speed
+
         self._select_flying_animation()
         self.anim_index = 0
         if self.anim:
@@ -257,7 +286,7 @@ class Coin:
         return val
 
     def _select_flying_animation(self):
-        # ВОССТАНОВЛЕННАЯ ЛОГИКА (Классическая)
+        # Классическая логика выбора анимации
         if abs(self.vx) > 1.5 * abs(self.vy):
             self.anim = self.sprites.get("right", []) if self.vx > 0 else self.sprites.get("left", [])
         elif abs(self.vy) > 1.5 * abs(self.vx):
@@ -307,7 +336,11 @@ class Coin:
     def _handle_collisions(self, nearby_coins):
         for other in nearby_coins:
             if other is self: continue
+            # ИСПРАВЛЕНО: Если другая монетка летит - мы её не трогаем (физика только для лежачих)
             if other.is_moving: continue
+
+            # Проверка на None (безопасность)
+            if other is None: continue
 
             dx = self.sprite.center_x - other.sprite.center_x
             dy = self.sprite.center_y - other.sprite.center_y
@@ -320,21 +353,30 @@ class Coin:
                 nx = dx / dist
                 ny = dy / dist
 
+                # === НОВОЕ: МАССА (РАЗДЕЛЕНИЕ) ===
+                total_mass = self.mass + other.mass
+                # Легкую монету отталкивает сильнее
+                ratio_self = other.mass / total_mass
+                ratio_other = self.mass / total_mass
+
                 # 1. Раздвигаем
                 max_instant_sep = 2.0
                 sep_mag = min(overlap * 0.5, max_instant_sep)
-                self.sprite.center_x += sep_mag * nx
-                self.sprite.center_y += sep_mag * ny
-                other.sprite.center_x -= sep_mag * nx
-                other.sprite.center_y -= sep_mag * ny
+                self.sprite.center_x += sep_mag * nx * ratio_self
+                self.sprite.center_y += sep_mag * ny * ratio_self
+                other.sprite.center_x -= sep_mag * nx * ratio_other
+                other.sprite.center_y -= sep_mag * ny * ratio_other
 
                 # 2. Импульс отталкивания
                 stiffness = 4.8
                 push = overlap * stiffness
-                self.vx += nx * push
-                self.vy += ny * push
-                other.vx -= nx * push
-                other.vy -= ny * push
+
+                # Сила толчка зависит от массы того, кто толкает? Или просто упругость?
+                # Упругая деформация:
+                self.vx += (nx * push * ratio_self) / self.mass
+                self.vy += (ny * push * ratio_self) / self.mass
+                other.vx -= (nx * push * ratio_other) / other.mass
+                other.vy -= (ny * push * ratio_other) / other.mass
 
                 # 3. ФИЗИКА ВРАЩЕНИЯ
                 dvx = self.vx - other.vx

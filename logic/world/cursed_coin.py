@@ -20,11 +20,15 @@ class CursedCoin(Coin):
             scale=scale,
             scale_factor=scale_factor
         )
+        # === МАССА (Тяжелая) ===
+        self.mass = 1.5
+
         self.bankruptcy_triggered = False
         self.sound_played = False
         self.is_used = False
 
     def land(self) -> None:
+        # Сбрасываем флаги
         self.bankruptcy_triggered = False
         self.sound_played = False
         super().land()
@@ -41,10 +45,10 @@ class CursedCoin(Coin):
 
         # Запуск исчезновения
         self.is_used = True
-        self.lifetime = 2.5  # Исчезнет через 2.5 секунды
-        self.is_fading = True  # Флаг для прозрачности
+        self.lifetime = 2.5
+        self.is_fading = True
 
-    # ЗАЩИТА ОТ ПЕРЕВОРОТА СУЩНОСТЯМИ
+    # ЗАЩИТА ОТ ПЕРЕВОРОТА
     def hit(self, dx: int, dy: int) -> None:
         if self.is_used: return
         super().hit(dx, dy)

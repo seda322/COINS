@@ -670,3 +670,17 @@ class UIController:
 
         for key in self._enabled:
             self._enabled[key] = True
+
+    def cancel_press(self):
+        """Сбрасывает визуальное нажатие кнопки."""
+        self._pressed_id = None
+        self._pressed_down_id = None
+
+    def get_pressed_button_id(self) -> str:
+        """Возвращает ID кнопки, на которой сейчас зажата мышь."""
+        return self._pressed_down_id
+
+    def is_button_enabled(self, upgrade_id: str) -> bool:
+        """Проверяет, активна ли кнопка."""
+        return self._enabled.get(upgrade_id, False)
+

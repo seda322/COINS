@@ -21,18 +21,20 @@ class SilverCoin(Coin):
             scale=scale,
             scale_factor=scale_factor
         )
+        # === МАССА СЕРЕБРА ===
+        self.mass = 1.1
+
         self.crit_chance = 0.05
         self.is_crit = False
 
     def land(self) -> None:
-        # ИСПРАВЛЕНИЕ: Сначала проверяем торнадо, как в базовом классе
+        # Проверка торнадо
         if self.tornado_hit:
             self.anim_index = 0
             if not self.anim:
                 self._select_flying_animation()
             return
 
-        # Обычная логика приземления серебра
         is_heads = random.random() < 0.5
         val = 0
 
@@ -56,3 +58,4 @@ class SilverCoin(Coin):
             self.sprite.texture = self.sprites["tails"]
 
         self.landed = True
+        self.just_landed = True

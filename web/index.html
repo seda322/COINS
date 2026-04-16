@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Incremental Coin Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden; /* Запрещаем скролл страницы */
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        /* Скрываем стандартный лоадер Pygbag, если нужно, или стилизуем */
+        #pygbag-debug-overlay { display: none !important; }
+    </style>
+    <!-- ПОДКЛЮЧАЕМ SDK ЯНДЕКСА -->
+    <script src="https://yandex.ru/games/sdk/v2"></script>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <!-- Скрипт инициализации -->
+    <script>
+        // 1. Инициализируем SDK
+        YaGames.init().then(ysdk => {
+            console.log("Yandex SDK initialized");
+            window.ysdk = ysdk; // Сохраняем в глобальную переменную для Python
+
+            // 2. Передаем язык в Python при старте
+            // Русский язык для RU, иначе EN
+            var lang = ysdk.environment.i18n.tld === 'ru' ? 'ru' : 'en';
+
+            // Находим объект pyodide (он появится после загрузки Pygbag)
+            // Pygbag загружается немного позже, поэтому ждем
+            waitForPyodide(lang);
+        }).catch(err => {
+            console.error("Yandex SDK init error:", err);
+            // Если ошибка, просто запускаем игру
+            waitForPyodide('ru');
+        });
+
+        function waitForPyodide(lang) {
+            // Ждем пока Pyodide загрузится (стандартное имя модуля для pygbag - main)
+            let interval = setInterval(() => {
+                if (window.pyodide && window.pyodide.runPython) {
+                    clearInterval(interval);
+                    try {
+                        // Вызываем функцию в Python для установки языка
+                        window.pyodide.runPython(`
+import localization
+import yandex_helper
+# Синхронизируем язык
+localization.current_lang = "${lang}"
+print(f"Language set to: ${lang}")
+                        `);
+                    } catch(e) {
+                        console.log("Python lang sync error", e);
+                    }
+                }
+            }, 100);
+        }
+
+        // 3. Функция для проверки тачскрина (вызывается из Python)
+        window.hasTouchScreen = function() {
+            return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        };
+    </script>
+
+    <!-- Стандартный загрузчик Pygbag -->
+    <script src="main.js" type="module"></script>
+</body>
+</html>

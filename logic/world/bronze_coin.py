@@ -18,3 +18,5 @@ class BronzeCoin(Coin):
             scale=scale,
             scale_factor=scale_factor
         )
+        # === МАССА БРОНЗЫ ===
+        self.mass = 0.8

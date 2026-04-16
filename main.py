@@ -24,6 +24,11 @@ TITLE = "Incremental Coin Game (Pygame)"
 STATE_MENU = 0
 STATE_GAME = 1
 
+# === РЕЖИМ РАЗРАБОТЧИКА ===
+# Установите True, чтобы видеть админ-панель при тестах.
+# Установите False перед публикацией игры!
+DEBUG_MODE = True
+
 
 class MenuCoin(PygameSprite):
     """
@@ -246,6 +251,11 @@ def main():
     pygame.init()
     pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
 
+    # === ИНИЦИАЛИЗАЦИЯ ЯЗЫКА (ПОДКЛЮЧАЕМ ЯНДЕКС ПОМОЩНИК) ===
+    # Импортируем и запускаем определение языка
+    import yandex_helper
+    yandex_helper.initialize_environment()
+
     info = pygame.display.Info()
     start_w = int(info.current_w * 0.8)
     start_h = int(info.current_h * 0.8)
@@ -293,19 +303,19 @@ def main():
         scale_factor=scale_factor
     )
 
+    # === ПРОВЕРКА УСТРОЙСТВА ===
+    # Вычисляем один раз при старте
+    game.is_mobile_device = yandex_helper.is_mobile()
+    print(f"Is Mobile Device: {game.is_mobile_device}")
+
     state = STATE_MENU
     running = True
 
     has_save = False
-    save_path = game.get_save_path()
-    if os.path.exists(save_path):
-        if game.load_game():
-            has_save = True
-        else:
-            try:
-                os.remove(save_path)
-            except:
-                pass
+    # save_path теперь не нужен, GC сам управляет хранилищем
+    # Проверяем наличие сохранения через контроллер (он использует storage)
+    if game.load_game():
+        has_save = True
 
     menu_coins = []
 
@@ -361,10 +371,21 @@ def main():
     show_help = False
     help_scroll_y = 0
     help_w, help_h = 600, 400
+    # Добавьте эти переменные (аналоги игровых)
+    is_dragging_help = False
+    help_last_drag_y = 0
 
     # --- ГЛАВНЫЙ ЦИКЛ ---
-    # Добавляем переменную состояния диалога
-    active_dialog = None  # Может быть 'prestige', 'new_game' или None
+    active_dialog = None
+
+    # Переменные для Drag & Drop скролла (Игра)
+    is_dragging_ui = False
+    last_drag_y = 0
+    potential_click = False
+
+    # Переменные для скролла помощи (Меню)
+    help_dragging = False
+    help_last_y = 0
 
     while running:
         dt = clock.tick(FPS) / 1000.0
@@ -381,15 +402,20 @@ def main():
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if state == STATE_MENU:
+                    # === ЛОГИКА МЕНЮ ===
                     if show_help:
                         help_x = (VIRTUAL_WIDTH - help_w) // 2
                         help_y = (VIRTUAL_HEIGHT - help_h) // 2
-                        close_btn_size = 30
-                        close_rect = pygame.Rect(help_x + help_w - close_btn_size - 10, help_y + 10, close_btn_size,
-                                                 close_btn_size)
+                        close_rect = pygame.Rect(help_x + help_w - 40, help_y + 10, 30, 30)
                         if close_rect.collidepoint(vmx, vmy):
                             show_help = False
                             continue
+
+                        # Логика как в игре: Захват
+                        help_rect = pygame.Rect(help_x, help_y, help_w, help_h)
+                        if help_rect.collidepoint(vmx, vmy):
+                            is_dragging_help = True
+                            help_last_drag_y = vmy
                     else:
                         if btn_play_rect.collidepoint(vmx, vmy):
                             state = STATE_GAME
@@ -405,12 +431,9 @@ def main():
                 elif state == STATE_GAME:
                     # === ЛОГИКА ДИАЛОГОВ ===
                     if active_dialog:
-                        # Размеры окна диалога
                         dialog_w, dialog_h = 500, 250
                         dialog_x = (VIRTUAL_WIDTH - dialog_w) // 2
                         dialog_y = (VIRTUAL_HEIGHT - dialog_h) // 2
-
-                        # Кнопки диалога
                         btn_w_d, btn_h_d = 120, 50
                         btn_yes = pygame.Rect(dialog_x + 50, dialog_y + dialog_h - 70, btn_w_d, btn_h_d)
                         btn_no = pygame.Rect(dialog_x + dialog_w - 170, dialog_y + dialog_h - 70, btn_w_d, btn_h_d)
@@ -425,85 +448,197 @@ def main():
                                 active_dialog = None
                             elif btn_no.collidepoint(vmx, vmy) or btn_close_d.collidepoint(vmx, vmy):
                                 active_dialog = None
-                        continue  # Блокируем остальной ввод пока открыт диалог
+                        continue
 
                     # === ОСНОВНАЯ ИГРОВАЯ ЛОГИКА ===
                     logic_y = VIRTUAL_HEIGHT - vmy
 
-                    # Админ-панель
-                    if event.button == pygame.BUTTON_LEFT:
-                        admin_y_start = VIRTUAL_HEIGHT - 60 - 220 - 20
-                        admin_btn_lucky = pygame.Rect(10, admin_y_start + 10, 200, 40)
-                        admin_btn_cursed = pygame.Rect(10, admin_y_start + 60, 200, 40)
-                        admin_btn_money = pygame.Rect(10, admin_y_start + 110, 200, 40)
-                        admin_btn_beetle = pygame.Rect(10, admin_y_start + 160, 200, 40)
+                    # === АДМИН-ПАНЕЛЬ (ТОЛЬКО ДЛЯ РАЗРАБОТЧИКА) ===
+                    if DEBUG_MODE:
+                        if event.button == pygame.BUTTON_LEFT:
+                            admin_y_start = VIRTUAL_HEIGHT - 60 - 220 - 20
+                            admin_btn_lucky = pygame.Rect(10, admin_y_start + 10, 200, 40)
+                            admin_btn_cursed = pygame.Rect(10, admin_y_start + 60, 200, 40)
+                            admin_btn_money = pygame.Rect(10, admin_y_start + 110, 200, 40)
+                            admin_btn_beetle = pygame.Rect(10, admin_y_start + 160, 200, 40)
 
-                        if admin_btn_lucky.collidepoint(vmx, vmy):
-                            game.spawn_coin("lucky", vmx, logic_y)
-                            continue
-                        elif admin_btn_cursed.collidepoint(vmx, vmy):
-                            game.spawn_coin("cursed", vmx, logic_y)
-                            continue
-                        elif admin_btn_money.collidepoint(vmx, vmy):
-                            amount = 1_000_000_000_000_000_000_000_000
-                            game.balance.add(amount)
-                            game.prestige.add_income(amount)
-                            continue
-                        elif admin_btn_beetle.collidepoint(vmx, vmy):
-                            game.spawn_beetle()
-                            continue
+                            if admin_btn_lucky.collidepoint(vmx, vmy):
+                                game.spawn_coin("lucky", vmx, logic_y)
+                                continue
+                            elif admin_btn_cursed.collidepoint(vmx, vmy):
+                                game.spawn_coin("cursed", vmx, logic_y)
+                                continue
+                            elif admin_btn_money.collidepoint(vmx, vmy):
+                                amount = 1_000_000_000_000_000_000_000_000
+                                game.balance.add(amount)
+                                game.prestige.add_income(amount)
+                                continue
+                            elif admin_btn_beetle.collidepoint(vmx, vmy):
+                                game.spawn_beetle()
+                                continue
 
                     if event.button == pygame.BUTTON_LEFT:
+                        # Кнопка захвата
+                        if game.grab_purchased and game.is_mobile_device:
+                            grab_btn_rect = pygame.Rect(game_lang_rect.x - 120, game_btn_margin, 100, game_btn_h)
+                            if grab_btn_rect.collidepoint(vmx, vmy):
+                                game.grab_mode_active = not game.grab_mode_active
+                                continue
+
+                        # Звук и Язык
                         if game_mute_rect.collidepoint(vmx, vmy):
                             sound_manager.toggle_mute()
                         elif game_lang_rect.collidepoint(vmx, vmy):
                             localization.toggle_language()
                             ui.reload_texts()
+
+                        # === ЛОГИКА UI (Скролл/Клик) ===
                         elif vmx > WORLD_WIDTH:
+                            # 1. Сначала "нажимаем"
                             ui.on_mouse_press(vmx, vmy)
+
+                            # 2. Проверяем результат
+                            pressed_id = ui.get_pressed_button_id()
+
+                            if pressed_id:
+                                # Мы попали в кнопку
+                                if ui.is_button_enabled(pressed_id):
+                                    # Кнопка активна -> это КЛИК
+                                    potential_click = True
+                                    # is_dragging_ui остается False
+                                else:
+                                    # Кнопка неактивна -> это СКРОЛЛ
+                                    potential_click = False
+                                    is_dragging_ui = True
+                                    last_drag_y = vmy
+                                    ui.cancel_press()
+                            else:
+                                # Попали в фон -> это СКРОЛЛ
+                                potential_click = False
+                                is_dragging_ui = True
+                                last_drag_y = vmy
+
+                        # Клик по полю
                         else:
                             game.on_mouse_press(vmx, logic_y, pygame.BUTTON_LEFT)
+
                     elif event.button == pygame.BUTTON_RIGHT:
                         if vmx <= WORLD_WIDTH:
                             game.on_mouse_press_rmb(vmx, logic_y)
 
             elif event.type == pygame.MOUSEBUTTONUP:
+                # Сброс перетаскивания меню помощи
+                if state == STATE_MENU:
+                    is_dragging_help = False
                 if state == STATE_GAME and not active_dialog:
                     logic_y = VIRTUAL_HEIGHT - vmy
                     if event.button == pygame.BUTTON_RIGHT:
                         game.on_mouse_release_rmb(vmx, logic_y)
                     elif event.button == pygame.BUTTON_LEFT:
-                        if vmx > WORLD_WIDTH:
-                            if not (game_mute_rect.collidepoint(vmx, vmy) or game_lang_rect.collidepoint(vmx, vmy)):
-                                upgrade_id = ui.on_mouse_release(vmx, vmy)
-                                if upgrade_id:
-                                    # === ПЕРЕХВАТ ДИАЛОГОВ ===
-                                    if upgrade_id == "prestige":
-                                        if game.prestige.can_prestige():
-                                            active_dialog = 'prestige'
-                                    elif upgrade_id == "new_game":
-                                        active_dialog = 'new_game'
-                                    elif upgrade_id == "exit_to_menu":
-                                        game.save_game()
-                                        state = STATE_MENU
-                                        has_save = True
-                                    elif upgrade_id == "finish_game":
-                                        game.save_game()
-                                        running = False
-                                    else:
-                                        game.try_buy_upgrade(upgrade_id)
+                        # === ОБРАБОТКА РЕЖИМА ЗАХВАТА ===
+                        if game.grab_purchased and game.grab_mode_active:
+                            if game.grabbed_coin:
+                                game.on_mouse_release_rmb(vmx, logic_y)
+                            else:
+                                game.on_mouse_press_rmb(vmx, logic_y)
+                            continue
+
+                        # Сброс скролла
+                        is_dragging_ui = False
+
+                        # Обработка клика (если был начат клик и не перешел в скролл)
+                        if potential_click:
+                            potential_click = False
+                            if vmx > WORLD_WIDTH:
+                                if not (game_mute_rect.collidepoint(vmx, vmy) or game_lang_rect.collidepoint(vmx, vmy)):
+                                    upgrade_id = ui.on_mouse_release(vmx, vmy)
+                                    if upgrade_id:
+                                        if upgrade_id == "prestige":
+                                            if game.prestige.can_prestige():
+                                                active_dialog = 'prestige'
+                                        elif upgrade_id == "new_game":
+                                            active_dialog = 'new_game'
+                                        elif upgrade_id == "exit_to_menu":
+                                            game.save_game()
+                                            state = STATE_MENU
+                                            has_save = True
+                                        elif upgrade_id == "finish_game":
+                                            game.save_game()
+                                            running = False
+                                        else:
+                                            game.try_buy_upgrade(upgrade_id)
 
             elif event.type == pygame.MOUSEMOTION:
+                # === МЕНЮ ПОМОЩИ (Перетаскивание - ТОЧНО КАК В ИГРЕ) ===
+                if state == STATE_MENU and show_help and is_dragging_help:
+                    dy = vmy - help_last_drag_y
+
+                    # === ПОВТОРЯЕМ ЛОГИКУ ИГРЫ ===
+                    # В игре: ui.on_mouse_scroll(vmx, vmy, dy * 0.05)
+                    # В UI: scroll_y -= val * 20.
+                    # Итого: scroll_y -= dy.
+                    # Это значит: Тянем ВНИЗ (dy > 0) -> Скролл уменьшается -> Текст едет ВНИЗ (мы смотрим ВВЕРХ).
+
+                    help_scroll_y -= dy
+                    help_last_drag_y = vmy
+
+                    # === ГРАНИЦЫ (с запасом 50px снизу) ===
+                    lines_count = 0
+                    h_keys = ["help_goal", "help_goal_text", "", "help_gameplay", "help_gameplay_text", "",
+                              "help_special", "help_special_text", "", "help_entities", "help_entities_text", "",
+                              "help_prestige", "help_prestige_text", "", "help_luck"]
+                    for key in h_keys:
+                        txt = localization.get_text(key)
+                        if txt: lines_count += txt.count("\n") + 1
+
+                    total_text_height = lines_count * 25 + 50  # +50 пикселей отступ снизу
+                    max_scroll = total_text_height - help_h
+                    if max_scroll < 0: max_scroll = 0
+
+                    if help_scroll_y < 0: help_scroll_y = 0
+                    if help_scroll_y > max_scroll: help_scroll_y = max_scroll
+
+                # === ИГРОВОЙ UI И ИГРА (НЕ ТРОГАЕМ) ===
                 if state == STATE_GAME and not active_dialog:
                     logic_y = VIRTUAL_HEIGHT - vmy
-                    dx = int(event.rel[0] * (VIRTUAL_WIDTH / screen.get_width()))
-                    dy = int(-event.rel[1] * (VIRTUAL_HEIGHT / screen.get_height()))
-                    game.on_mouse_motion(vmx, logic_y, dx, dy)
+
+                    if is_dragging_ui:
+                        dy = vmy - last_drag_y
+                        ui.on_mouse_scroll(vmx, vmy, dy * 0.05)
+                        last_drag_y = vmy
+                    elif potential_click:
+                        distance = math.sqrt(event.rel[0] ** 2 + event.rel[1] ** 2)
+                        if distance > 5:
+                            potential_click = False
+                            is_dragging_ui = True
+                            last_drag_y = vmy
+                            ui.cancel_press()
+                    else:
+                        dx = int(event.rel[0] * (VIRTUAL_WIDTH / screen.get_width()))
+                        dy = int(-event.rel[1] * (VIRTUAL_HEIGHT / screen.get_height()))
+                        game.on_mouse_motion(vmx, logic_y, dx, dy)
 
             elif event.type == pygame.MOUSEWHEEL:
                 if state == STATE_MENU and show_help:
-                    help_scroll_y += event.y * 30
+                    # Стандарт: Колесо Вниз -> Скролл Вниз
+                    help_scroll_y -= event.y * 30
+
+                    # === ГРАНИЦЫ (с запасом 50px снизу) ===
+                    lines_count = 0
+                    h_keys = ["help_goal", "help_goal_text", "", "help_gameplay", "help_gameplay_text", "",
+                              "help_special", "help_special_text", "", "help_entities", "help_entities_text", "",
+                              "help_prestige", "help_prestige_text", "", "help_luck"]
+                    for key in h_keys:
+                        txt = localization.get_text(key)
+                        if txt: lines_count += txt.count("\n") + 1
+
+                    total_text_height = lines_count * 25 + 50  # +50 пикселей отступ снизу
+                    max_scroll = total_text_height - help_h
+                    if max_scroll < 0: max_scroll = 0
+
                     if help_scroll_y < 0: help_scroll_y = 0
+                    if help_scroll_y > max_scroll: help_scroll_y = max_scroll
+
                 elif state == STATE_GAME and not active_dialog:
                     if vmx > WORLD_WIDTH:
                         ui.on_mouse_scroll(vmx, vmy, event.y)
@@ -560,7 +695,6 @@ def main():
                     txt_surf = main_font.render(text, True, (255, 255, 255))
                     txt_rect = txt_surf.get_rect(center=rect.center)
                     canvas.blit(txt_surf, txt_rect)
-
             else:
                 help_x = (VIRTUAL_WIDTH - help_w) // 2
                 help_y = (VIRTUAL_HEIGHT - help_h) // 2
@@ -570,14 +704,16 @@ def main():
                 help_lines = [
                     localization.get_text("help_goal"), localization.get_text("help_goal_text"), "",
                     localization.get_text("help_gameplay"), localization.get_text("help_gameplay_text"), "",
-                    localization.get_text("help_fusion"), localization.get_text("help_fusion_text"), "",
+                    localization.get_text("help_special"), localization.get_text("help_special_text"), "",
+                    localization.get_text("help_entities"), localization.get_text("help_entities_text"), "",
+                    localization.get_text("help_prestige"), localization.get_text("help_prestige_text"), "",
                     localization.get_text("help_luck")
                 ]
 
                 clip_rect = pygame.Rect(help_x, help_y, help_w, help_h)
                 canvas.set_clip(clip_rect)
 
-                text_y = help_y + 20 + help_scroll_y
+                text_y = help_y + 20 - help_scroll_y
                 for line in help_lines:
                     if "\n" in line:
                         parts = line.split("\n")
@@ -613,7 +749,6 @@ def main():
             lang_surf = main_font.render(lang_text, True, (255, 255, 255))
             canvas.blit(lang_surf, lang_surf.get_rect(center=game_lang_rect.center))
 
-            # Перевод звука
             sound_state_key = "sound_on" if not sound_manager.muted else "sound_off"
             sound_text = localization.get_text(sound_state_key)
 
@@ -623,70 +758,69 @@ def main():
             sound_surf = main_font.render(sound_text, True, (255, 255, 255))
             canvas.blit(sound_surf, sound_surf.get_rect(center=game_mute_rect.center))
 
-            # 3. Престиж (Слева сверху, черным)
+            # 3. Престиж
             pres_template = localization.get_text("prestige_level_text")
             prestige_text = pres_template.format(game.prestige.points, round(game.prestige.multiplier, 1))
             pres_surf = main_font.render(prestige_text, True, (0, 0, 0))
             canvas.blit(pres_surf, (10, 10))
 
-            # 4. Админ-панель
-            admin_panel_height = 220
-            admin_y_start = VIRTUAL_HEIGHT - 60 - admin_panel_height - 20
+            # === 4. АДМИН-ПАНЕЛЬ (ОТРИСОВКА) ===
+            # Рисуется только если DEBUG_MODE == True
+            if DEBUG_MODE:
+                admin_panel_height = 220
+                admin_y_start = VIRTUAL_HEIGHT - 60 - admin_panel_height - 20
 
-            admin_btn_h = 40
-            admin_btn_w = 200
-            admin_x = 10
+                admin_btn_h = 40
+                admin_btn_w = 200
+                admin_x = 10
 
-            admin_btn_lucky = pygame.Rect(admin_x, admin_y_start + 10, admin_btn_w, admin_btn_h)
-            admin_btn_cursed = pygame.Rect(admin_x, admin_y_start + 60, admin_btn_w, admin_btn_h)
-            admin_btn_money = pygame.Rect(admin_x, admin_y_start + 110, admin_btn_w, admin_btn_h)
-            admin_btn_beetle = pygame.Rect(admin_x, admin_y_start + 160, admin_btn_w, admin_btn_h)
+                admin_btn_lucky = pygame.Rect(admin_x, admin_y_start + 10, admin_btn_w, admin_btn_h)
+                admin_btn_cursed = pygame.Rect(admin_x, admin_y_start + 60, admin_btn_w, admin_btn_h)
+                admin_btn_money = pygame.Rect(admin_x, admin_y_start + 110, admin_btn_w, admin_btn_h)
+                admin_btn_beetle = pygame.Rect(admin_x, admin_y_start + 160, admin_btn_w, admin_btn_h)
 
-            # Фон панели
-            pygame.draw.rect(canvas, (50, 50, 50, 180),
-                             (admin_x - 5, admin_y_start + 5, admin_btn_w + 10, admin_panel_height), border_radius=5)
+                # Фон панели
+                pygame.draw.rect(canvas, (50, 50, 50, 180),
+                                 (admin_x - 5, admin_y_start + 5, admin_btn_w + 10, admin_panel_height),
+                                 border_radius=5)
 
-            # Кнопка Lucky
-            lucky_color = (50, 150, 50) if not admin_btn_lucky.collidepoint(vmx, vmy) else (70, 200, 70)
-            pygame.draw.rect(canvas, lucky_color, admin_btn_lucky, border_radius=3)
-            lucky_txt = main_font.render("SPAWN LUCKY", True, (255, 255, 255))
-            canvas.blit(lucky_txt, (admin_btn_lucky.x + 10, admin_btn_lucky.y + 10))
+                # Кнопка Lucky
+                lucky_color = (50, 150, 50) if not admin_btn_lucky.collidepoint(vmx, vmy) else (70, 200, 70)
+                pygame.draw.rect(canvas, lucky_color, admin_btn_lucky, border_radius=3)
+                lucky_txt = main_font.render("SPAWN LUCKY", True, (255, 255, 255))
+                canvas.blit(lucky_txt, (admin_btn_lucky.x + 10, admin_btn_lucky.y + 10))
 
-            # Кнопка Cursed
-            cursed_color = (100, 50, 100) if not admin_btn_cursed.collidepoint(vmx, vmy) else (150, 70, 150)
-            pygame.draw.rect(canvas, cursed_color, admin_btn_cursed, border_radius=3)
-            cursed_txt = main_font.render("SPAWN CURSED", True, (255, 255, 255))
-            canvas.blit(cursed_txt, (admin_btn_cursed.x + 10, admin_btn_cursed.y + 10))
+                # Кнопка Cursed
+                cursed_color = (100, 50, 100) if not admin_btn_cursed.collidepoint(vmx, vmy) else (150, 70, 150)
+                pygame.draw.rect(canvas, cursed_color, admin_btn_cursed, border_radius=3)
+                cursed_txt = main_font.render("SPAWN CURSED", True, (255, 255, 255))
+                canvas.blit(cursed_txt, (admin_btn_cursed.x + 10, admin_btn_cursed.y + 10))
 
-            # Кнопка Money
-            money_color = (150, 150, 50) if not admin_btn_money.collidepoint(vmx, vmy) else (200, 200, 70)
-            pygame.draw.rect(canvas, money_color, admin_btn_money, border_radius=3)
-            money_txt = main_font.render("+1 SEPTILLION $", True, (0, 0, 0))
-            canvas.blit(money_txt, (admin_btn_money.x + 10, admin_btn_money.y + 10))
+                # Кнопка Money
+                money_color = (150, 150, 50) if not admin_btn_money.collidepoint(vmx, vmy) else (200, 200, 70)
+                pygame.draw.rect(canvas, money_color, admin_btn_money, border_radius=3)
+                money_txt = main_font.render("+1 SEPTILLION $", True, (0, 0, 0))
+                canvas.blit(money_txt, (admin_btn_money.x + 10, admin_btn_money.y + 10))
 
-            # Кнопка Beetle
-            beetle_color = (150, 100, 50) if not admin_btn_beetle.collidepoint(vmx, vmy) else (200, 140, 70)
-            pygame.draw.rect(canvas, beetle_color, admin_btn_beetle, border_radius=3)
-            beetle_txt = main_font.render("SPAWN BEETLE", True, (255, 255, 255))
-            canvas.blit(beetle_txt, (admin_btn_beetle.x + 10, admin_btn_beetle.y + 10))
+                # Кнопка Beetle
+                beetle_color = (150, 100, 50) if not admin_btn_beetle.collidepoint(vmx, vmy) else (200, 140, 70)
+                pygame.draw.rect(canvas, beetle_color, admin_btn_beetle, border_radius=3)
+                beetle_txt = main_font.render("SPAWN BEETLE", True, (255, 255, 255))
+                canvas.blit(beetle_txt, (admin_btn_beetle.x + 10, admin_btn_beetle.y + 10))
 
-            # === 5. ОТРИСОВКА ДИАЛОГОВ (ПОВЕРХ ВСЕГО) ===
+            # === 5. ОТРИСОВКА ДИАЛОГОВ ===
             if active_dialog:
-                # Затемнение фона (15%)
                 overlay = pygame.Surface((VIRTUAL_WIDTH, VIRTUAL_HEIGHT), pygame.SRCALPHA)
-                overlay.fill((0, 0, 0, 38))  # 255 * 0.15 ~= 38
+                overlay.fill((0, 0, 0, 38))
                 canvas.blit(overlay, (0, 0))
 
-                # Окно диалога
                 dialog_w, dialog_h = 500, 250
                 dialog_x = (VIRTUAL_WIDTH - dialog_w) // 2
                 dialog_y = (VIRTUAL_HEIGHT - dialog_h) // 2
 
-                # Фон окна
                 pygame.draw.rect(canvas, (40, 40, 40), (dialog_x, dialog_y, dialog_w, dialog_h), border_radius=10)
                 pygame.draw.rect(canvas, (200, 200, 200), (dialog_x, dialog_y, dialog_w, dialog_h), 2, border_radius=10)
 
-                # Текст
                 if active_dialog == 'prestige':
                     title = localization.get_text("dialog_prestige_title")
                     text = localization.get_text("dialog_prestige_text")
@@ -698,33 +832,38 @@ def main():
                 title_rect = title_surf.get_rect(center=(dialog_x + dialog_w // 2, dialog_y + 40))
                 canvas.blit(title_surf, title_rect)
 
-                # Текст сообщения
                 text_surf = main_font.render(text, True, (200, 200, 200))
                 text_rect = text_surf.get_rect(center=(dialog_x + dialog_w // 2, dialog_y + 100))
                 canvas.blit(text_surf, text_rect)
 
-                # Кнопки
                 btn_w_d, btn_h_d = 120, 50
                 btn_yes = pygame.Rect(dialog_x + 50, dialog_y + dialog_h - 70, btn_w_d, btn_h_d)
                 btn_no = pygame.Rect(dialog_x + dialog_w - 170, dialog_y + dialog_h - 70, btn_w_d, btn_h_d)
                 btn_close_d = pygame.Rect(dialog_x + dialog_w - 40, dialog_y + 10, 30, 30)
 
-                # Кнопка Да (Зеленая)
                 yes_color = (50, 150, 50) if not btn_yes.collidepoint(vmx, vmy) else (70, 200, 70)
                 pygame.draw.rect(canvas, yes_color, btn_yes, border_radius=5)
                 yes_txt = main_font.render(localization.get_text("dialog_yes"), True, (255, 255, 255))
                 canvas.blit(yes_txt, yes_txt.get_rect(center=btn_yes.center))
 
-                # Кнопка Нет (Красная)
                 no_color = (150, 50, 50) if not btn_no.collidepoint(vmx, vmy) else (200, 70, 70)
                 pygame.draw.rect(canvas, no_color, btn_no, border_radius=5)
                 no_txt = main_font.render(localization.get_text("dialog_no"), True, (255, 255, 255))
                 canvas.blit(no_txt, no_txt.get_rect(center=btn_no.center))
 
-                # Кнопка Закрыть (Крестик)
                 pygame.draw.rect(canvas, (200, 50, 50), btn_close_d, border_radius=5)
                 x_surf = main_font.render("X", True, (255, 255, 255))
                 canvas.blit(x_surf, x_surf.get_rect(center=btn_close_d.center))
+
+            # === КНОПКА РЕЖИМА ЗАХВАТА (ДЛЯ МОБИЛЬНЫХ) ===
+            # Рисуем кнопку ТОЛЬКО если это мобильное устройство
+            if game.grab_purchased and game.is_mobile_device:
+                grab_btn_rect = pygame.Rect(game_lang_rect.x - 120, game_btn_margin, 100, game_btn_h)
+                grab_color = (0, 150, 0) if game.grab_mode_active else (80, 80, 80)
+                pygame.draw.rect(canvas, grab_color, grab_btn_rect, border_radius=5)
+                txt = "GRAB: ON" if game.grab_mode_active else "GRAB: OFF"
+                grab_txt = main_font.render(txt, True, (255, 255, 255))
+                canvas.blit(grab_txt, grab_txt.get_rect(center=grab_btn_rect.center))
 
         pygame.transform.smoothscale(canvas, (screen.get_width(), screen.get_height()), screen)
         pygame.display.flip()

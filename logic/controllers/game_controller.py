@@ -5,6 +5,7 @@ import json
 import os
 import time
 import sys
+from browser_saver import BrowserStorage
 from logic.economy.prestige import PrestigeManager
 from logic.world.gold_coin import GoldCoin
 from logic.world.bronze_coin import BronzeCoin
@@ -34,19 +35,23 @@ class GameController:
         self.coins = []
         self.particles = []
         self.floating_texts = []
+        self.grab_mode_active = False # НОВАя переменная для мобилок
 
         # === ПРЕСТИЖ ===
         self.prestige = PrestigeManager()
         self.confirmation_dialog = None
+        # НОВОЕ: Инициализация хранилища и режима захвата
+        self.storage = BrowserStorage()
+        self.grab_mode_active = False  # Переменная для кнопки на мобильных
 
-        # === КОНСТАНТЫ БАЗОВОЙ СТОИМОСТИ ===
+        # === КОНСТАНТЫ БАЗОВОЙ СТОИМОСТИ (ИСПРАВЛЕНО ДЛЯ БАЛАНСА) ===
         self.base_prices = {
             "buy_bronze_coin": 10,
-            "bronze_value_upgrade": 50,
+            "bronze_value_upgrade": 100,  # Было 50. Подняли цену входа.
             "silver_crit_upgrade": 500,
             "silver_crit_chance_upgrade": 1000,
-            "silver_value_upgrade": 5000,
-            "gold_value_upgrade": 50000,
+            "silver_value_upgrade": 2000,  # Было 5000. Опустили, чтобы серебро было актуально.
+            "gold_value_upgrade": 50000,  # Было слишком дорого относительно дохода.
             "grab_upgrade": 100000,
             "gold_explosion_upgrade": 250000,
             "wisp_spawn": 1000000,
@@ -70,12 +75,12 @@ class GameController:
             "fuse_to_gold": 0,
         }
 
-        # === МНОЖИТЕЛИ РОСТА ЦЕН ===
+        # === МНОЖИТЕЛИ РОСТА ЦЕН (ИСПРАВЛЕНО) ===
         self.price_mult = {
             "buy_bronze_coin": 1.10,
-            "bronze_value_upgrade": 1.15,
+            "bronze_value_upgrade": 1.20,      # Было 1.15. Рост цены быстрее.
             "silver_value_upgrade": 1.20,
-            "gold_value_upgrade": 1.25,
+            "gold_value_upgrade": 1.20,       # Оставляем 1.20, так как база высокая.
             "silver_crit_upgrade": 1.30,
             "silver_crit_chance_upgrade": 1.40,
             "auto_flip_upgrade": 1.50,
@@ -425,10 +430,8 @@ class GameController:
 
             elif upgrade_id == "buy_victory":
                 if not self.game_over_active:
-                    try:
-                        os.remove(self.get_save_path())
-                    except:
-                        pass
+                    # Исправлено
+                    self.storage.delete()
                     self.game_over_active = True
                     self.game_over_timer = 0.0
                     self.game_over_stage = 0
@@ -724,12 +727,19 @@ class GameController:
                             dist_sq = dx * dx + dy * dy
                             if dist_sq > 0:
                                 dist = math.sqrt(dist_sq)
-                                force = 2000.0 * self.scale_factor * (
+                                # Базовая сила взрыва
+                                base_force = 2000.0 * self.scale_factor * (
                                         1.0 - min(dist / (1000.0 * self.scale_factor), 0.5))
+
                                 nx = dx / dist
                                 ny = dy / dist
-                                c.vx += nx * force
-                                c.vy += ny * force
+
+                                # === УЧЕТ МАССЫ ===
+                                # Тяжелые монеты улетают недалеко
+                                final_force = base_force / c.mass
+
+                                c.vx += nx * final_force
+                                c.vy += ny * final_force
                                 c.is_moving = True
                                 c._select_flying_animation()
 
@@ -1023,7 +1033,17 @@ class GameController:
 
     def on_mouse_press(self, x: int, y: int, button: int) -> None:
         if self.game_over_active: return
-        if button == pygame.BUTTON_LEFT:  # CHANGE: arcade.MOUSE_BUTTON_LEFT -> pygame.BUTTON_LEFT
+
+        # === НОВОЕ: Обработка "Режима захвата" для мобильных ===
+        # Если куплен захват и включен режим захвата, ЛКМ работает как ПКМ
+        if button == pygame.BUTTON_LEFT:
+            if self.grab_purchased and self.grab_mode_active:
+                # Имитируем ПКМ для захвата
+                self.on_mouse_press_rmb(x, y)
+                return
+
+        # Стандартная логика ЛКМ
+        if button == pygame.BUTTON_LEFT:
             if x < self.width:
                 clicked_coin = False
                 for coin in self.coins:
@@ -1165,7 +1185,7 @@ class GameController:
     def save_game(self) -> None:
         data = {
             "balance": self.balance.get(),
-            "prestige": self.prestige.get_data(),  # Сохраняем престиж
+            "prestige": self.prestige.get_data(),
             "upgrade_prices": self.upgrade_prices,
             "silver_crit_level": self.silver_crit_level,
             "beetle_stash": self.beetle_stash,
@@ -1239,32 +1259,21 @@ class GameController:
                 coin_type = "cursed"
             data["coins"].append({
                 "type": coin_type,
-                "x": coin.sprite.center_x,
-                "y": coin.sprite.center_y,
-                "vx": coin.vx,
-                "vy": coin.vy,
-                "scale": coin.scale,
-                "is_moving": coin.is_moving,
-                "angle": coin.angle
+                "x": coin.sprite.center_x, "y": coin.sprite.center_y,
+                "vx": coin.vx, "vy": coin.vy, "scale": coin.scale,
+                "is_moving": coin.is_moving, "angle": coin.angle
             })
 
-        try:
-            with open(self.get_save_path(), "w") as f:
-                json.dump(data, f, ensure_ascii=True)
-        except Exception as e:
-            print(f"DEBUG: Error saving game: {e}")
+        # ИСПОЛЬЗУЕМ НОВОЕ ХРАНИЛИЩЕ
+        self.storage.save(data)
 
     def load_game(self) -> bool:
-        path = self.get_save_path()
-        if not os.path.exists(path): return False
+        # ИСПОЛЬЗУЕМ НОВОЕ ХРАНИЛИЩЕ
+        data = self.storage.load()
+        if not data: return False
+
         try:
-            with open(path, "r") as f:
-                data = json.load(f)
-            if data is None: return False
-
             self.balance._value = data["balance"]
-
-            # === ЗАГРУЗКА ПРЕСТИЖА ===
             if "prestige" in data:
                 self.prestige.load_data(data["prestige"])
             else:
@@ -1306,7 +1315,7 @@ class GameController:
             self.tornado_cooldown_level = data.get("tornado_cooldown_level", 0)
 
             self.combo_unlocked = data.get("combo_unlocked", False)
-            self.combo_limit_level = data.get("combo_limit_level", 1)
+            self.combo_limit_level = data.get("combo_limit_level", 0)
             loaded_combo_value = data.get("combo_value", 1.0)
             new_limit = self.combo_base_limit + (self.combo_limit_level * 0.5)
             if new_limit > 10.0: new_limit = 10.0
@@ -1353,7 +1362,6 @@ class GameController:
             self.coins.clear()
             for c_data in data["coins"]:
                 c_type = c_data["type"]
-
                 coin_value = 1
                 if c_type == "bronze":
                     coin_value = self.base_coin_values["bronze"] * (1.5 ** self.bronze_value_level)
@@ -1396,13 +1404,12 @@ class GameController:
             self._sync_ui_prices()
 
             # Обновление UI флагов
-            if self.tornado_cooldown_level >= 10:
-                self.ui.set_button_disabled("tornado_cooldown_upgrade", "КД Торнадо (Макс.)")
-            if self.meteor_cooldown_level >= 10:
-                self.ui.set_button_disabled("meteor_cooldown_upgrade", "КД метеорита (Макс.)")
-            if self.silver_crit_chance_level >= 50:
-                self.ui.set_button_disabled("silver_crit_chance_upgrade", "Шанс крита (Макс.)")
-
+            if self.tornado_cooldown_level >= 10: self.ui.set_button_disabled("tornado_cooldown_upgrade",
+                                                                              "КД Торнадо (Макс.)")
+            if self.meteor_cooldown_level >= 10: self.ui.set_button_disabled("meteor_cooldown_upgrade",
+                                                                             "КД метеорита (Макс.)")
+            if self.silver_crit_chance_level >= 50: self.ui.set_button_disabled("silver_crit_chance_upgrade",
+                                                                                "Шанс крита (Макс.)")
             if self.grab_purchased: self.ui.mark_purchased("grab_upgrade")
             if self.gold_explosion_unlocked: self.ui.mark_purchased("gold_explosion_upgrade")
             if self.wisp: self.ui.mark_purchased("wisp_spawn")
@@ -1415,7 +1422,6 @@ class GameController:
             self.ui.update_wisp_state(self.wisp is not None)
             self.ui.update_meteor_state(self.meteor_unlocked)
             self.ui.update_zone_state(has_zone_2=(self.zone_2 is not None), has_zone_5=(self.zone_5 is not None))
-
             return True
         except Exception as e:
             print(f"DEBUG: Error loading game: {e}")
@@ -1474,11 +1480,8 @@ class GameController:
 
         if hard_reset:
             self.prestige = PrestigeManager()
-            if os.path.exists(self.get_save_path()):
-                try:
-                    os.remove(self.get_save_path())
-                except:
-                    pass
+            # ИСправлено: Удаляем через хранилище
+            self.storage.delete()
         else:
             self.prestige.reset_run_stats()
 
@@ -1705,7 +1708,7 @@ class GameController:
 
     def _calculate_price(self, base_id: str, level: int) -> int:
         base = self.base_prices.get(base_id, 100)
-        mult = self.price_mult.get(base_id, 1.15)
+        mult = self.price_mult.get(base_id, 1.15) # По умолчанию 1.15, если ключ забыт
         return int(base * (mult ** level))
 
     def _get_current_level(self, upgrade_id):

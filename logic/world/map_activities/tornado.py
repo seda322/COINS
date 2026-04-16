@@ -59,10 +59,8 @@ class Tornado(PygameSprite):
         return True
 
     def affect_coin(self, coin, dt):
-        if not hasattr(coin, 'vx'):
-            return
-        if coin.wisp_immunity_timer > 0:
-            return
+        if not hasattr(coin, 'vx'): return
+        if coin.wisp_immunity_timer > 0: return
 
         suction_point_x = self.center_x
         suction_point_y = self.bottom
@@ -80,8 +78,13 @@ class Tornado(PygameSprite):
             ny = dy / dist
 
             progress = 1.0 - (dist / self.pull_radius)
-            pull_force = self.pull_strength * progress
-            spin_force = self.spin_strength * progress
+
+            # === УЧЕТ МАССЫ ===
+            # Тяжелые монеты всасываются медленнее (сила делится на массу)
+            mass_factor = 1.0 / coin.mass
+
+            pull_force = self.pull_strength * progress * mass_factor
+            spin_force = self.spin_strength * progress * mass_factor
 
             coin.vx += (nx * pull_force - ny * spin_force) * dt
             coin.vy += (ny * pull_force + nx * spin_force) * dt
@@ -89,14 +92,10 @@ class Tornado(PygameSprite):
             coin.tornado_hit = True
 
         else:
-            # ВЫШЛА ИЗ РАДИУСА
             if coin.tornado_hit:
                 coin.tornado_hit = False
                 coin.vx *= 0.8
                 coin.vy *= 0.8
-                coin.tornado_exit_time = 1.5
-                # УБРАНО: Принудительный сброс anim и texture.
-                # Монетка теперь сама упадет по физике (через land), когда скорость упадет или анимация кончится.
 
     def draw(self, surface, screen_height) -> None:
         super().draw(surface, screen_height)
