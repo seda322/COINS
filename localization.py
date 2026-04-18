@@ -2,7 +2,7 @@ current_lang = "ru"
 
 TEXTS = {
     "ru": {
-        "menu_title": "Incremental Coin Game",
+        "menu_title": "СOINS",
         "btn_prestige": "Престиж",
         "btn_play": "Играть",
         "btn_help": "Как играть?",
@@ -49,31 +49,44 @@ TEXTS = {
         "btn_tornado_cd": "КД Торнадо",
         "btn_spawn_meteor": "Метеорит",
         "btn_meteor_cd": "КД метеорита",
-        # ИСПРАВЛЕНО: Ключи престижа
+        "btn_free_gold": "Бесплатное золото",
+
+        # Престиж
         "prestige_level_text": "Уровень Престижа: {0} (x{1} Доход)",
         "prestige_need": "Престиж (Нужно > 1B)",
         "prestige_gain": "Престиж (+{0})",
-        # ИСПРАВЛЕНО: Ключи звука
+
+        # Звук
         "sound_on": "Звук: Вкл",
         "sound_off": "Звук: Выкл",
+
+        # Диалоги
         "dialog_yes": "Да",
         "dialog_no": "Нет",
         "dialog_prestige_title": "Престиж",
         "dialog_prestige_text": "Вы уверены? Весь прогресс будет сброшен.",
         "dialog_new_game_title": "Новая игра",
         "dialog_new_game_text": "Вы уверены? Весь прогресс будет сброшен.",
-        # === НОВОЕ ОПИСАНИЕ "КАК ИГРАТЬ" ===
+
+        # === НОВОЕ ОПИСАНИЕ "КАК ИГРАТЬ" (Кратко и понятно) ===
         "help_goal": "ЦЕЛЬ ИГРЫ",
-        "help_goal_text": "Накапливайте баланс, покупайте улучшения и стремитесь к Победе.",
-        "help_gameplay": "ФИЗИКА И МОНЕТЫ",
-        "help_gameplay_text": "Кликайте на монеты, чтобы подбросить их.\nОрел — прибыль, Решка — урон.\nМасса монет влияет на физику:\nЗолотая (1.5) тяжелее Бронзовой (0.8) в 2 раза!",
+        "help_goal_text": "Накапливайте баланс и покупайте улучшения.\nПуть к Победе лежит через Престиж.",
+
+        "help_gameplay": "ПРАВИЛА",
+        "help_gameplay_text": "Кликните по монете, чтобы подбросить.\nОрел дает доход монетки, Решка ничего не дает.",
+
         "help_special": "ОСОБЫЕ МОНЕТЫ",
-        "help_special_text": "Зеленая (Lucky): x5 к балансу при успехе.\nЧерная (Cursed): x100 к балансу или\nполное банкротство (0$).",
+        "help_special_text": "Встречаются крайне редко.\nЗеленая (Lucky): x5 к балансу.\nЧерная (Cursed): x100 к балансу или аннулирует баланс.",
+
         "help_entities": "СУЩНОСТИ",
-        "help_entities_text": "Жук: Крадет 75% дохода в свой тайник.\nКликните по нему, чтобы забрать накопленное x2.\nТорнадо: Затягивает легкие монеты.\nМетеорит: Взрыв отбрасывает монеты.",
+        "help_entities_text": "Жук: Крадет 75% дохода в тайник.\nКлик по нему вернет всё x2.\nТорнадо: Затягивает монеты в воронку.\nМетеорит: Взрыв переворачивает монеты.",
+
         "help_prestige": "ПРЕСТИЖ",
-        "help_prestige_text": "Сбрасывает весь прогресс, но дает\nпостоянный множитель дохода.",
-        "help_luck": "Удачи в игре!",
+        "help_prestige_text": "Сбрасывает прогресс, но дает\nпостоянный множитель дохода.",
+
+        "help_fusion": "СЛИЯНИЕ",
+        "help_fusion_text": "5 Бронзовых -> 1 Серебряная\n3 Серебряных -> 1 Золотая",
+
         "btn_new_game": "Новая игра",
         "btn_victory": "Победа??",
         "status_max": "Макс.",
@@ -81,19 +94,12 @@ TEXTS = {
         "status_fuse_need": "нужно",
         "status_fuse_silver": "Слияние в серебро",
         "status_fuse_gold": "Слияние в золото",
-        "help_goal": "ОСНОВНАЯ ЦЕЛЬ:",
-        "help_goal_text": "Накапливайте баланс, покупайте улучшения.",
-        "help_gameplay": "ГЕЙМПЛЕЙ:",
-        "help_gameplay_text": "Нажмите на монетку, чтобы подбросить её.\nЕсли выпадет Орел, вы получаете деньги.",
-        "help_fusion": "СЛИЯНИЕ:",
-        "help_fusion_text": "5 Бронзовых -> 1 Серебряная\n3 Серебряных -> 1 Золотая",
-        "help_luck": "Удачи!",
         "btn_exit_menu": "Выход в меню",
         "lang_ru": "RU",
         "lang_en": "EN",
     },
     "en": {
-        "menu_title": "Incremental Coin Game",
+        "menu_title": "COINS",
         "btn_play": "Play",
         "btn_prestige": "Prestige",
         "btn_help": "How to play?",
@@ -101,19 +107,26 @@ TEXTS = {
         "ui_upgrades": "Upgrades",
         "ui_balance": "Balance",
         "tab_coins": "Coins",
-        # === NEW HELP TEXT ===
+
+        # === NEW "HOW TO PLAY" (Concise) ===
         "help_goal": "GOAL",
-        "help_goal_text": "Accumulate balance, buy upgrades, and aim for Victory.",
-        "help_gameplay": "PHYSICS & COINS",
-        "help_gameplay_text": "Click coins to toss them.\nHeads = Profit, Tails = Damage.\nCoin mass affects physics:\nGold (1.5) is 2x heavier than Bronze (0.8)!",
+        "help_goal_text": "Accumulate balance and buy upgrades.\nThe path to Victory lies through Prestige.",
+
+        "help_gameplay": "RULES",
+        "help_gameplay_text": "Click a coin to toss it.\nHeads gives the coin income, Tails gives nothing.",
+
         "help_special": "SPECIAL COINS",
-        "help_special_text": "Green (Lucky): x5 balance on success.\nBlack (Cursed): x100 balance OR\ncomplete bankruptcy ($0).",
+        "help_special_text": "Appear very rarely.\nGreen (Lucky): x5 balance.\nBlack (Cursed): x100 balance or cancel the balance",
+
         "help_entities": "ENTITIES",
-        "help_entities_text": "Beetle: Steals 75% of income.\nClick it to claim the stash x2.\nTornado: Sucks in light coins.\nMeteor: Blast pushes coins away.",
+        "help_entities_text": "Beetle: Steals 75% income.\nClick it to claim stash x2.\nTornado: Sucks coins into the funnel.\nMeteor: Blast flips nearby coins.",
+
         "help_prestige": "PRESTIGE",
         "help_prestige_text": "Resets progress but grants a\npermanent income multiplier.",
 
-        "help_luck": "Good Luck!",
+        "help_fusion": "FUSION",
+        "help_fusion_text": "5 Bronze -> 1 Silver\n3 Silver -> 1 Gold",
+
         "tab_map": "Map",
         "dialog_yes": "Yes",
         "dialog_no": "No",
@@ -127,6 +140,7 @@ TEXTS = {
         "grp_silver": "Silver Coin",
         "grp_gold": "Gold Coin",
         "grp_combo": "Combo",
+        "btn_free_gold": "Free gold",
         "grp_common": "Common",
         "grp_wisp": "Wisp",
         "grp_zone2": "Zone x2",
@@ -172,13 +186,6 @@ TEXTS = {
         "status_fuse_need": "need",
         "status_fuse_silver": "Fuse to Silver",
         "status_fuse_gold": "Fuse to Gold",
-        "help_goal": "MAIN GOAL:",
-        "help_goal_text": "Accumulate balance, buy upgrades.",
-        "help_gameplay": "GAMEPLAY:",
-        "help_gameplay_text": "Click a coin to toss it.\nIf Heads, you get money.",
-        "help_fusion": "FUSION:",
-        "help_fusion_text": "5 Bronze -> 1 Silver\n3 Silver -> 1 Gold",
-        "help_luck": "Good Luck!",
         "lang_ru": "RU",
         "lang_en": "EN",
     }

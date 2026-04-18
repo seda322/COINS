@@ -1,5 +1,6 @@
 import pygame
 import os
+import time  # Импортируем time
 from dataclasses import dataclass
 from typing import Optional, List, Dict
 import sys
@@ -67,11 +68,10 @@ class UIController:
         self.header_height = int(80 * self.scale_factor)
         self.tab_bar_height = int(50 * self.scale_factor)
         self.padding = int(20 * self.scale_factor)
-        self.btn_height = int(70 * self.scale_factor)
+        self.btn_height = int(80 * self.scale_factor)
         self.group_header_height = int(40 * self.scale_factor)
         self.btn_gap = int(10 * self.scale_factor)
 
-        # Инициализируем вкладки с локализацией
         self.tabs = [
             _TabStub(0, get_text("tab_coins")),
             _TabStub(1, get_text("tab_map")),
@@ -146,14 +146,11 @@ class UIController:
         # === ВКЛАДКА 2 (Настройки) ===
         self.tab_content[2] = [
             _UiGroupStub(get_text("grp_settings"), [
-                # Кнопка Престижа
-                _UiButtonStub("prestige", "", "btn_prestige", 0, is_one_time=False, max_level=-1),
-                # Кнопка Новая игра
+                _UiButtonStub("watch_ad", "", "btn_free_gold", 0, is_one_time=False),
                 _UiButtonStub("new_game", "", "btn_new_game", 0, is_one_time=True),
-                # Кнопка Победы
-                _UiButtonStub("buy_victory", "", "btn_victory", 10_000_000_000_000_000_000_000_000, is_one_time=True),
-                # НОВАЯ КНОПКА: Выход в меню
                 _UiButtonStub("exit_to_menu", "", "btn_exit_menu", 0, is_one_time=True),
+                _UiButtonStub("prestige", "", "btn_prestige", 0, is_one_time=False, max_level=-1),
+                _UiButtonStub("buy_victory", "", "btn_victory", 10_000_000_000_000_000_000_000_000, is_one_time=True),
             ]),
         ]
 
@@ -175,13 +172,22 @@ class UIController:
 
         self.scroll_y = 0
 
-        self.font_size_header = int(32 * self.scale_factor)
-        self.font_size_balance = int(30 * self.scale_factor)
-        self.font_size_button = int(22 * self.scale_factor)
-        self.font_size_tab = int(18 * self.scale_factor)
-        self.font_size_group = int(22 * self.scale_factor)
+        # === РАЗМЕРЫ ШРИФТОВ ===
+        self.font_size_header = int(38 * self.scale_factor)
+        self.font_size_balance = int(36 * self.scale_factor)
+        self.font_size_button = int(24 * self.scale_factor)
+        self.font_size_tab = int(22 * self.scale_factor)
+        self.font_size_group = int(28 * self.scale_factor)
+
+        # === ТАЙМЕР РЕКЛАМЫ ===
+        self._last_ad_time = 0  # Время последнего просмотра
+        self._ad_cooldown = 60.0  # 2 минуты
 
         self.reload_texts()
+
+    def mark_ad_watched(self):
+        """Вызывается из main, когда награда за рекламу получена."""
+        self._last_ad_time = time.time()
 
     def _format_number(self, num: int) -> str:
         if num == 0: return "0"
@@ -195,30 +201,21 @@ class UIController:
         return formatted_val
 
     def update_button(self, upgrade_id: str, cost: int, level: int = 0, name: str = None) -> None:
-        # Проверяем, это кнопка престижа? Если да - НЕ обновляем её через этот метод,
-        # так как у неё своя логика обновления (update_prestige_button)
-        if upgrade_id == "prestige":
-            return
-
+        if upgrade_id == "prestige": return
         for tab_groups in self.tab_content.values():
             for grp in tab_groups:
                 for b in grp.buttons:
                     if b.upgrade_id == upgrade_id:
                         b.base_cost = cost
                         b.level = level
-                        if name is not None:
-                            b.base_name = name
-
+                        if name is not None: b.base_name = name
                         display_name = get_text(b.base_name)
                         price_str = self._format_number(cost)
-
                         if b.upgrade_id in ["new_game", "finish_game"]:
                             b.title = display_name
                             return
-
                         if b.is_one_time:
-                            if not b.is_purchased:
-                                b.title = f"{display_name} ({price_str})"
+                            if not b.is_purchased: b.title = f"{display_name} ({price_str})"
                         else:
                             if level > 0:
                                 b.title = f"{display_name} ({level}) ({price_str})"
@@ -256,10 +253,11 @@ class UIController:
                         return
 
     def update(self, balance_value: int, coin_counts=None) -> None:
+        current_time = time.time()
+
         for tab_groups in self.tab_content.values():
             for grp in tab_groups:
                 for b in grp.buttons:
-
                     btn_name = get_text(b.base_name)
                     price_str = self._format_number(b.base_cost)
 
@@ -268,10 +266,8 @@ class UIController:
                         b.title = btn_name
                         continue
 
-                    if b.upgrade_id == "prestige":
-                        continue  # Управляется отдельным методом
+                    if b.upgrade_id == "prestige": continue
 
-                    # === НОВОЕ: Логика для кнопки выхода ===
                     if b.upgrade_id == "exit_to_menu":
                         self._enabled[b.upgrade_id] = True
                         b.title = btn_name
@@ -292,17 +288,13 @@ class UIController:
                     if b.upgrade_id == "buy_victory":
                         enabled = balance_value >= b.base_cost
                         b.title = f"{btn_name} ({price_str})"
-
                     elif b.upgrade_id == "upgrade_combo_limit":
-                        # ИСПРАВЛЕНО: Если не открыто, кнопка просто затемнена, но цена видна
                         enabled = self._combo_unlocked and (balance_value >= b.base_cost)
                         if b.level > 0:
                             b.title = f"{btn_name} ({b.level}) ({price_str})"
                         else:
                             b.title = f"{btn_name} ({price_str})"
-
                     elif b.upgrade_id == "tornado_cooldown_upgrade":
-                        # ИСПРАВЛЕНО: Если нет торнадо, кнопка затемнена, цена видна
                         if not self._has_tornado:
                             enabled = False
                             b.title = f"{btn_name} ({price_str})"
@@ -312,9 +304,20 @@ class UIController:
                                 b.title = f"{btn_name} ({b.level}) ({price_str})"
                             else:
                                 b.title = f"{btn_name} ({price_str})"
+                    elif b.upgrade_id == "watch_ad":
+                        # === ЛОГИКА ТАЙМЕРА РЕКЛАМЫ ===
+                        elapsed = current_time - self._last_ad_time
+                        if elapsed < self._ad_cooldown:
+                            remaining = int(self._ad_cooldown - elapsed)
+                            mins = remaining // 60
+                            secs = remaining % 60
+                            b.title = f"{btn_name} ({mins:02d}:{secs:02d})"
+                            enabled = False
+                        else:
+                            b.title = f"{btn_name} (+10%)"
+                            enabled = True
 
                     elif b.upgrade_id == "meteor_cooldown_upgrade":
-                        # ИСПРАВЛЕНО: Если нет метеора, кнопка затемнена, цена видна
                         if not self._meteor_unlocked:
                             enabled = False
                             b.title = f"{btn_name} ({price_str})"
@@ -324,7 +327,6 @@ class UIController:
                                 b.title = f"{btn_name} ({b.level}) ({price_str})"
                             else:
                                 b.title = f"{btn_name} ({price_str})"
-
                     elif b.upgrade_id == "spawn_tornado":
                         if self._has_tornado:
                             b.title = f"{btn_name} ({get_text('status_purchased')})"
@@ -332,7 +334,6 @@ class UIController:
                         else:
                             enabled = balance_value >= b.base_cost
                             b.title = f"{btn_name} ({price_str})"
-
                     elif b.upgrade_id == "spawn_meteor":
                         if self._meteor_unlocked:
                             b.title = f"{btn_name} ({get_text('status_purchased')})"
@@ -340,16 +341,12 @@ class UIController:
                         else:
                             enabled = balance_value >= b.base_cost
                             b.title = f"{btn_name} ({price_str})"
-
                     elif b.upgrade_id == "grab_upgrade":
-                        if self._has_gold and not b.is_purchased:
-                            enabled = balance_value >= b.base_cost
+                        if self._has_gold and not b.is_purchased: enabled = balance_value >= b.base_cost
                         b.title = f"{btn_name} ({price_str})"
-
                     elif b.upgrade_id == "gold_explosion_upgrade":
                         enabled = (not self._explosion_purchased) and (balance_value >= b.base_cost)
                         b.title = f"{btn_name} ({price_str})"
-
                     elif b.upgrade_id == "wisp_spawn":
                         if self._has_wisp:
                             b.title = f"{btn_name} ({get_text('status_purchased')})"
@@ -363,7 +360,6 @@ class UIController:
                             b.title = f"{btn_name} ({b.level}) ({price_str})"
                         else:
                             b.title = f"{btn_name} ({price_str})"
-
                     elif b.upgrade_id == "spawn_zone_2":
                         if self._has_zone_2:
                             b.title = f"{btn_name} ({get_text('status_purchased')})"
@@ -390,7 +386,6 @@ class UIController:
                             b.title = f"{btn_name} ({b.level}) ({price_str})"
                         else:
                             b.title = f"{btn_name} ({price_str})"
-
                     elif b.upgrade_id == "fuse_to_silver":
                         if coin_counts and coin_counts.get('bronze', 0) >= 5:
                             enabled = True
@@ -399,7 +394,6 @@ class UIController:
                             enabled = False
                             needed = 5 - coin_counts.get('bronze', 0) if coin_counts else 5
                             b.title = f"{btn_name} ({get_text('status_fuse_need')} {needed})"
-
                     elif b.upgrade_id == "fuse_to_gold":
                         if coin_counts and coin_counts.get('silver', 0) >= 3:
                             enabled = True
@@ -408,7 +402,6 @@ class UIController:
                             enabled = False
                             needed = 3 - coin_counts.get('silver', 0) if coin_counts else 3
                             b.title = f"{btn_name} ({get_text('status_fuse_need')} {needed})"
-
                     else:
                         enabled = balance_value >= b.base_cost
                         if not b.is_one_time and b.level > 0:
@@ -428,18 +421,15 @@ class UIController:
         head_font = pygame.font.Font(self.game_font_path,
                                      self.font_size_header) if self.game_font_path else pygame.font.SysFont("Arial",
                                                                                                             self.font_size_header)
-
         title_surf = head_font.render(get_text("ui_upgrades"), True, (200, 200, 200))
-        surface.blit(title_surf, (self.panel_x + self.padding, 5))
+        surface.blit(title_surf, (self.panel_x + self.padding, 2))
 
         formatted_balance = self._format_number(balance_value)
         bal_font = pygame.font.Font(self.game_font_path,
                                     self.font_size_balance) if self.game_font_path else pygame.font.SysFont("Arial",
                                                                                                             self.font_size_balance)
         bal_surf = bal_font.render(f"{get_text('ui_balance')}: {formatted_balance}", True, (255, 255, 255))
-
-        # ИСПРАВЛЕНО: Баланс сдвинут вниз (header_height - 25 вместо header_height / 2 + 10)
-        bal_rect = bal_surf.get_rect(midleft=(self.panel_x + 20, self.header_height - 25))
+        bal_rect = bal_surf.get_rect(midleft=(self.panel_x + 20, self.header_height - 20))
         surface.blit(bal_surf, bal_rect)
 
         self._draw_tab_bar(surface, tabs_rect)
@@ -461,8 +451,11 @@ class UIController:
         groups = self.tab_content.get(self.active_tab_index, [])
 
         for grp in groups:
+            # === ЦЕНТРИРОВАНИЕ ЗАГОЛОВКА ГРУППЫ ===
             grp_surf = group_font.render(grp.title, True, (30, 30, 30))
-            surface.blit(grp_surf, (self.panel_x + self.padding, current_draw_y + 10))
+            grp_rect = grp_surf.get_rect(centerx=self.panel_x + self.panel_width // 2, y=current_draw_y + 10)
+            surface.blit(grp_surf, grp_rect)
+
             pygame.draw.line(surface, (100, 100, 100), (self.panel_x + self.padding, current_draw_y + 35),
                              (self.panel_x + self.panel_width - self.padding, current_draw_y + 35), 1)
 
@@ -497,13 +490,20 @@ class UIController:
 
                 color = (50, 50, 50) if enabled else (100, 100, 100)
                 text_surf = btn_font.render(b.title, True, color)
-                surface.blit(text_surf, (self.panel_x + self.padding + 14, y_draw + 22))
+
+                # === ЦЕНТРИРОВАНИЕ ТЕКСТА КНОПКИ ===
+                text_rect = text_surf.get_rect()
+                btn_center_x = (self.panel_x + self.padding) + (btn_w // 2)
+                btn_center_y = y_draw + (self.btn_height // 2)
+                text_rect.center = (btn_center_x, btn_center_y)
+                surface.blit(text_surf, text_rect)
 
                 current_draw_y += self.btn_height + self.btn_gap
 
             current_draw_y += 20
         surface.set_clip(None)
 
+    # Остальные методы без изменений (_draw_tab_bar, hit_test, etc...)
     def _draw_tab_bar(self, surface, rect):
         tab_w = self.panel_width / len(self.tabs)
         tab_font = pygame.font.Font(self.game_font_path,
@@ -624,8 +624,7 @@ class UIController:
         for tab_idx, groups in self.tab_content.items():
             grp_keys_list = group_keys.get(tab_idx, [])
             for i, grp in enumerate(groups):
-                if i < len(grp_keys_list):
-                    grp.title = get_text(grp_keys_list[i])
+                if i < len(grp_keys_list): grp.title = get_text(grp_keys_list[i])
 
     def update_prestige_button(self, gain: int, total_points: int, multiplier: float):
         btn = None
@@ -638,9 +637,7 @@ class UIController:
 
         if btn:
             if gain > 0:
-                # Форматируем число (например, 572000... -> 572B)
                 gain_str = self._format_number(gain)
-                # Используем ключ btn_prestige и добавляем_gain
                 btn.title = f"{get_text('btn_prestige')} (+{gain_str})"
                 self._enabled["prestige"] = True
             else:
@@ -668,19 +665,14 @@ class UIController:
         self._has_tornado = False
         self._combo_unlocked = False
 
-        for key in self._enabled:
-            self._enabled[key] = True
+        for key in self._enabled: self._enabled[key] = True
 
     def cancel_press(self):
-        """Сбрасывает визуальное нажатие кнопки."""
         self._pressed_id = None
         self._pressed_down_id = None
 
     def get_pressed_button_id(self) -> str:
-        """Возвращает ID кнопки, на которой сейчас зажата мышь."""
         return self._pressed_down_id
 
     def is_button_enabled(self, upgrade_id: str) -> bool:
-        """Проверяет, активна ли кнопка."""
         return self._enabled.get(upgrade_id, False)
-

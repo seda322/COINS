@@ -1,78 +1,148 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Incremental Coin Game</title>
     <style>
         body {
             margin: 0;
             padding: 0;
-            background-color: #000;
-            overflow: hidden; /* Запрещаем скролл страницы */
-        }
-        canvas {
-            display: block;
-            width: 100vw;
+            background-color: #222;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             height: 100vh;
         }
-        /* Скрываем стандартный лоадер Pygbag, если нужно, или стилизуем */
-        #pygbag-debug-overlay { display: none !important; }
+        canvas {
+            box-shadow: 0 0 20px black;
+        }
     </style>
-    <!-- ПОДКЛЮЧАЕМ SDK ЯНДЕКСА -->
+    <!-- Подключаем SDK Яндекса -->
     <script src="https://yandex.ru/games/sdk/v2"></script>
 </head>
 <body>
+    <!-- Канвас для игры -->
     <canvas id="canvas"></canvas>
 
-    <!-- Скрипт инициализации -->
+    <!-- Скрипт инициализации и рекламы -->
     <script>
-        // 1. Инициализируем SDK
+        // 1. Переменные для синхронизации Python <--> JS
+        window.last_reward_success = false;
+        window.ad_is_open = false; // Флаг: открыта ли реклама сейчас (для паузы)
+
+        // 2. Инициализируем SDK
         YaGames.init().then(ysdk => {
             console.log("Yandex SDK initialized");
-            window.ysdk = ysdk; // Сохраняем в глобальную переменную для Python
+            window.ysdk = ysdk;
 
-            // 2. Передаем язык в Python при старте
-            // Русский язык для RU, иначе EN
+            // Передаем язык в Python
             var lang = ysdk.environment.i18n.tld === 'ru' ? 'ru' : 'en';
-
-            // Находим объект pyodide (он появится после загрузки Pygbag)
-            // Pygbag загружается немного позже, поэтому ждем
             waitForPyodide(lang);
+
+            // === ВКЛЮЧАЕМ БАННЕР СРАЗУ ===
+            // Баннер будет внизу экрана. Игра должна учитывать это (или перекрывать).
+            showBanner();
+
         }).catch(err => {
             console.error("Yandex SDK init error:", err);
-            // Если ошибка, просто запускаем игру
             waitForPyodide('ru');
         });
 
         function waitForPyodide(lang) {
-            // Ждем пока Pyodide загрузится (стандартное имя модуля для pygbag - main)
             let interval = setInterval(() => {
                 if (window.pyodide && window.pyodide.runPython) {
                     clearInterval(interval);
                     try {
-                        // Вызываем функцию в Python для установки языка
                         window.pyodide.runPython(`
 import localization
 import yandex_helper
-# Синхронизируем язык
 localization.current_lang = "${lang}"
 print(f"Language set to: ${lang}")
                         `);
-                    } catch(e) {
-                        console.log("Python lang sync error", e);
-                    }
+                    } catch(e) { console.log("Python lang sync error", e); }
                 }
             }, 100);
         }
 
-        // 3. Функция для проверки тачскрина (вызывается из Python)
+        // === ФУНКЦИИ РЕКЛАМЫ ===
+
+        // 1. БАННЕРНАЯ РЕКЛАМА (Sticky Banner)
+        function showBanner() {
+            if (!window.ysdk) return;
+            window.ysdk.adv.showBannerAdv();
+            console.log("Banner Ad requested");
+        }
+
+        // 2. МЕЖСТРАНИЧНАЯ РЕКЛАМА (Interstitial) - раз в 2 минуты
+        function showInterstitial() {
+            if (!window.ysdk) return;
+
+            // Если реклама уже открыта, новую не вызываем
+            if (window.ad_is_open) return;
+
+            console.log("Requesting Interstitial Ad...");
+            window.ysdk.adv.showFullscreenAdv({
+                callbacks: {
+                    onOpen: () => {
+                        window.ad_is_open = true;
+                        console.log("Interstitial opened");
+                        // Уведомляем Python, что нужно поставить паузу
+                        if(window.pyodide) window.pyodide.runPython('yandex_helper.on_ad_opened()');
+                    },
+                    onClose: (wasShown) => {
+                        window.ad_is_open = false;
+                        console.log("Interstitial closed");
+                        if(window.pyodide) window.pyodide.runPython('yandex_helper.on_ad_closed()');
+                    },
+                    onError: (e) => {
+                        window.ad_is_open = false;
+                        console.log("Interstitial error", e);
+                        if(window.pyodide) window.pyodide.runPython('yandex_helper.on_ad_closed()');
+                    }
+                }
+            });
+        }
+
+        // 3. РЕКЛАМА ЗА ВОЗНАГРАЖДЕНИЕ (Rewarded Video)
+        function showRewardedVideo() {
+            if (!window.ysdk) return;
+
+            console.log("Requesting Rewarded Video...");
+            window.ysdk.adv.showRewardedVideo({
+                callbacks: {
+                    onOpen: () => {
+                        window.ad_is_open = true;
+                        // Ставим паузу
+                        if(window.pyodide) window.pyodide.runPython('yandex_helper.on_ad_opened()');
+                    },
+                    onRewarded: () => {
+                        console.log("Reward Granted!");
+                        // Ставим флаг, который Python проверит в следующем кадре
+                        window.last_reward_success = true;
+                    },
+                    onClose: () => {
+                        window.ad_is_open = false;
+                        if(window.pyodide) window.pyodide.runPython('yandex_helper.on_ad_closed()');
+                    },
+                    onError: (e) => {
+                        window.ad_is_open = false;
+                        console.log("Rewarded error", e);
+                        if(window.pyodide) window.pyodide.runPython('yandex_helper.on_ad_closed()');
+                    }
+                }
+            });
+        }
+
+        // Функция проверки тачскрина
         window.hasTouchScreen = function() {
             return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         };
     </script>
 
-    <!-- Стандартный загрузчик Pygbag -->
-    <script src="main.js" type="module"></script>
+    <!-- Загрузка Pyodide и вашего приложения -->
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <script src="pygadget.js"></script>
 </body>
 </html>
